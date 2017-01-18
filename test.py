@@ -14,7 +14,7 @@ def read_data(file):
         for row in data:
             row[1] = dt.strptime(row[1],'%d%b%Y') #create datetime objects
 
-        return data, n_nan
+    return data, n_nan
 
 data, n_nan = read_data(DATA_PATH)
 print(data[1:10,:])

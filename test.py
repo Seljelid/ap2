@@ -20,6 +20,5 @@ data, n_nan = read_data(DATA_PATH)
 print(data[1:10,:])
 print(n_nan)
 
-print('Sluta sabba nu iscyb')
 
 

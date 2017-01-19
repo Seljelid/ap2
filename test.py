@@ -2,6 +2,7 @@ import numpy as np
 import csv
 import pandas as pd
 from datetime import datetime as dt
+import tensorflow as ts
 
 DATA_PATH = '../Data/ai_dataset2.csv'
 
@@ -13,12 +14,14 @@ def read_data(file):
         data = df.as_matrix()
         for row in data:
             row[1] = dt.strptime(row[1],'%d%b%Y') #create datetime objects
-
     return data, n_nan
 
 data, n_nan = read_data(DATA_PATH)
 print(data[1:10,:])
-print(n_nan)
+print(n_nan/np.shape(data[0::,1]))
+
+
+
 
 
 

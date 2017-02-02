@@ -35,8 +35,8 @@ X = data_stock[header[3:24]]
 Y = data_stock[header[-3]]
 
 
-X = preprocessing.scale(X)
-X = pd.DataFrame(X)
+#X = preprocessing.scale(X)
+#X = pd.DataFrame(X)
 
 #X = np.expand_dims(X,axis = 1)
 Y = np.expand_dims(Y,axis = 1)
@@ -45,7 +45,7 @@ Y_original = Y
 seq_len = 10
 output_size = 1
 hidden_size = 32
-learning_rate = 0.001
+learning_rate = 0.0005
 
 y_idiot = Y[(seq_len-4):-4,:]
 Y = Y[seq_len:,:]
@@ -94,6 +94,7 @@ keep_prob = tf.placeholder(tf.float32)
 #cell = tf.nn.rnn_cell.LSTMCell(hidden_size,state_is_tuple=True)
 num_layers=2
 cell = tf.nn.rnn_cell.LSTMCell(hidden_size,state_is_tuple=True)
+#cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=keep_prob)
 cell = tf.nn.rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
 
 val, _ = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
@@ -106,7 +107,7 @@ bias = tf.Variable(tf.constant(0.1, shape=[y_target.get_shape()[1]]))
 prediction = tf.matmul(last, weight) + bias
 prediction = tf.nn.dropout(prediction,keep_prob)
 cost = tf.reduce_sum(tf.pow(prediction - y_target, 2)/(2*training_size))
-optimizer = tf.train.GradientDescentOptimizer(learning_rate = learning_rate)
+optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
 minimize = optimizer.minimize(cost)
 test_error = tf.reduce_sum(tf.pow(prediction - y_target,2)/(2*test_size))
 idiot_error = tf.reduce_sum(tf.pow(np.mean(Y)-y_target,2)/(2*np.shape(Y)[0]))
@@ -119,7 +120,7 @@ sess.run(init)
 
 batch_size = 10
 no_of_batches = int(training_size / batch_size)
-epoch = 20
+epoch = 50
 store_train_c = np.zeros(shape=(epoch,1))
 store_test_c = np.zeros(shape = (epoch,1))
 #store_idiot_c = np.zeros(shape = (epoch,1))
@@ -128,7 +129,7 @@ for i in range(epoch):
     for j in range(no_of_batches):
         inp, out = train_data[ptr: ptr+batch_size], train_target[ptr: ptr+batch_size]
         ptr += batch_size
-        sess.run(minimize,feed_dict={x: inp, y_target: out, keep_prob: 0.75})
+        sess.run(minimize,feed_dict={x: inp, y_target: out, keep_prob: 0.5})
     print('Epoch ',str(i))#,': Cost ', c )
     train_c = sess.run(cost,feed_dict={x: train_data, y_target: train_target, keep_prob:1})
     test_c = sess.run(test_error,feed_dict={x: test_data, y_target: test_target, keep_prob:1})
@@ -169,13 +170,4 @@ plt.grid()
 plt.legend()
 plt.show()
 
-
-#pylab.title('Minimal Energy Configuration of %s Charges on Disc W = %s'%(N, W))
-
-#%%
-def Past_mean(y):
-    y_mean = np.cumsum(y)/np.linspace(1,len(y),len(y))
-    return(y_mean)
-
-    
     

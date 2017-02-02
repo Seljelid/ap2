@@ -1,10 +1,11 @@
-#%%
+#%% -----------DATA-------------
 import numpy as np
 import csv
 import pandas as pd
 from datetime import datetime as dt
 import tensorflow as tf
 import random
+import matplotlib.pyplot as plt
 
 DATA_PATH = '../Data/ai_dataset2.csv'
 
@@ -58,7 +59,7 @@ print(sess.run(X['F1'][10]))
 
 #init = tf.global_variables_initializer
 
-#%%
+#%% -----------PARA AND DATA-------------
 data_stock = data[data.xref == 'MS:TS10']
 header = np.array(list(data_stock))
 X = data_stock[header[3:24]]
@@ -82,7 +83,7 @@ train_target = Y[:training_size]
 test_data = X[training_size:]
 test_target = Y[training_size:]
 
-#%% MODEL
+#%% MODEL   ---------MODEl-------------
 tf.reset_default_graph()
 
 x = tf.placeholder(tf.float32,[None,seq_len, input_size])
@@ -136,8 +137,7 @@ for i in range(epoch):
 #print(test_error)
 sess.close()
 
-#%%
-import matplotlib.pyplot as plt
+#%% ------PLOT-------------
 
 plt.plot(store_train_c, linewidth=1, label = "Train")
 plt.plot(store_test_c, linewidth=1, label = "Validation")

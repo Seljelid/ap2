@@ -29,24 +29,27 @@ data, n_nan, header = read_data(DATA_PATH)
 #print('Number of unique stocks', len(unique))
 
 #%% -----------PARA AND DATA-------------
-data_stock = data[data.xref == 'MS:TS10']
+data_stock = data[data.xref =='MS:TS69451' ] #'MS:TS10'
 header = np.array(list(data_stock))
 X = data_stock[header[3:24]]
 Y = data_stock[header[-3]]
 
 
-#%%-----------RESCALE DATA---------------
 X = preprocessing.scale(X)
 X = pd.DataFrame(X)
 
 #X = np.expand_dims(X,axis = 1)
 Y = np.expand_dims(Y,axis = 1)
-Y = Y[10:,:]
+Y_original = Y
 
 seq_len = 10
 output_size = 1
-hidden_size = 16
+hidden_size = 32
 learning_rate = 0.001
+
+y_idiot = Y[(seq_len-4):-4,:]
+Y = Y[seq_len:,:]
+
 
 def rnn_data(data, time_steps, labels=False):
     """
@@ -103,11 +106,10 @@ bias = tf.Variable(tf.constant(0.1, shape=[y_target.get_shape()[1]]))
 prediction = tf.matmul(last, weight) + bias
 prediction = tf.nn.dropout(prediction,keep_prob)
 cost = tf.reduce_sum(tf.pow(prediction - y_target, 2)/(2*training_size))
-optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
+optimizer = tf.train.GradientDescentOptimizer(learning_rate = learning_rate)
 minimize = optimizer.minimize(cost)
 test_error = tf.reduce_sum(tf.pow(prediction - y_target,2)/(2*test_size))
 idiot_error = tf.reduce_sum(tf.pow(np.mean(Y)-y_target,2)/(2*np.shape(Y)[0]))
-
 
 # SESSION
 
@@ -120,7 +122,7 @@ no_of_batches = int(training_size / batch_size)
 epoch = 20
 store_train_c = np.zeros(shape=(epoch,1))
 store_test_c = np.zeros(shape = (epoch,1))
-store_idiot_c = np.zeros(shape = (epoch,1))
+#store_idiot_c = np.zeros(shape = (epoch,1))
 for i in range(epoch):
     ptr = 0#?
     for j in range(no_of_batches):
@@ -133,20 +135,47 @@ for i in range(epoch):
     idiot_c = sess.run(idiot_error,feed_dict={x: X, y_target: Y })
     store_train_c[i] = train_c
     store_test_c[i] = test_c
-    store_idiot_c[i] = idiot_c
+    #store_idiot_c[i] = idiot_c
     print(train_c)
     print(test_c)
-    print(idiot_c)
+    #print(idiot_c)
 #test_error = sess.run(test_error, {x: test_data, y_target: test_target })
 #print(test_error)
 sess.close()
 
 #%% ------PLOT-------------
+idiot1 = np.sum(np.power(np.mean(Y)-Y,2)/(2*np.shape(Y)[0]) )
+idiot2 = np.sum(np.power(y_idiot - Y, 2)/(2*np.shape(Y)[0]) )
 
+def Past_mean(y):
+    y_mean = np.cumsum(y)/np.linspace(1,len(y),len(y))
+    return(np.expand_dims(y_mean,axis=1))
+
+y_mean_past_4w = Past_mean(Y_original)[seq_len-4:-4]
+idiot3 = np.sum(np.power(y_mean_past_4w - Y, 2)/(2*np.shape(Y)[0]) )     
+
+
+plt.ylabel('MSE')
+plt.xlabel('Epoch')
+plt.title('learn rate = %s, batch = %s, time steps = %s'
+          %(learning_rate,batch_size,seq_len) )
 plt.plot(store_train_c, linewidth=1, label = "Train")
 plt.plot(store_test_c, linewidth=1, label = "Validation")
-plt.plot(store_idiot_c, linewidth=1, label = "Idiot")
+#plt.plot(store_idiot_c, linewidth=1, label = "Idiot")
+#plt.axhline(y = idiot1, xmin = 0, xmax = epoch)
+#plt.axline(y = idiot2, xmin = 0, xmax = epoch)
+plt.axhline(y = idiot3, xmin = 0, xmax = epoch,color = 'r',label = 'Past mean')
 plt.grid()
 plt.legend()
 plt.show()
 
+
+#pylab.title('Minimal Energy Configuration of %s Charges on Disc W = %s'%(N, W))
+
+#%%
+def Past_mean(y):
+    y_mean = np.cumsum(y)/np.linspace(1,len(y),len(y))
+    return(y_mean)
+
+    
+    

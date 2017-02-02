@@ -6,6 +6,7 @@ from datetime import datetime as dt
 import tensorflow as tf
 import random
 import matplotlib.pyplot as plt
+from sklearn import preprocessing
 
 DATA_PATH = '../Data/ai_dataset2.csv'
 
@@ -26,38 +27,6 @@ data, n_nan, header = read_data(DATA_PATH)
 #print(n_nan/np.shape(data[0::,1]))
 #unique, counts = np.unique(data[:,2], return_counts='True')
 #print('Number of unique stocks', len(unique))
-#%%
-#data_t = data[0:10000,:] 
-
-rows = np.random.choice(data.index.values, 10000)
-df = data.ix[rows]
-COLS = np.array(list(df))
-CAT_COLS = np.array(['portfolio','xref'])
-CONT_COLS = np.array(['F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11'
-                      ,'F12','F13','F14','F15','F16','F17','F18','F19','F20'
-                      ,'F21'])#,'z_score_4w','z_score_8w','z_score_12w'
-TARGET_COLS = ['z_score_4w']
-
-def input_fn(df): 
-    cont_cols = {k: tf.constant(df[k].values)
-      for k in CONT_COLS}
-    cat_cols = {k: tf.SparseTensor(
-      indices=[[i, 0] for i in range(df[k].size)],
-      values=df[k].values,
-      shape=[df[k].size, 1])
-                    for k in CAT_COLS}
-    feature_cols =  dict(list(cat_cols.items()) + list(cont_cols.items()) )
-    target = tf.constant(df[TARGET_COLS].values)
-    return feature_cols, target
-
-#%%
-tf.reset_default_graph()
-X,Y = input_fn(df)
-
-sess = tf.Session()
-print(sess.run(X['F1'][10]))
-
-#init = tf.global_variables_initializer
 
 #%% -----------PARA AND DATA-------------
 data_stock = data[data.xref == 'MS:TS10']
@@ -65,16 +34,45 @@ header = np.array(list(data_stock))
 X = data_stock[header[3:24]]
 Y = data_stock[header[-3]]
 
-X = np.expand_dims(X,axis = 1)
-Y = np.expand_dims(Y,axis = 1)
 
-seq_len = 1
-input_size = np.shape(X)[2]
+#%%-----------RESCALE DATA---------------
+X = preprocessing.scale(X)
+X = pd.DataFrame(X)
+
+#X = np.expand_dims(X,axis = 1)
+Y = np.expand_dims(Y,axis = 1)
+Y = Y[10:,:]
+
+seq_len = 10
 output_size = 1
 hidden_size = 16
 learning_rate = 0.001
 
-training_size = int(np.shape(X)[0]*0.5)
+def rnn_data(data, time_steps, labels=False):
+    """
+    creates new data frame based on previous observation
+      * example:
+        l = [1, 2, 3, 4, 5]
+        time_steps = 2
+        -> labels == False [[1, 2], [2, 3], [3, 4]]
+        -> labels == True [2, 3, 4, 5]
+    """
+    rnn_df = []
+    for i in range(len(data) - time_steps):
+        if labels:
+            try:
+                rnn_df.append(data.iloc[i + time_steps].as_matrix())
+            except AttributeError:
+                rnn_df.append(data.iloc[i + time_steps])
+        else:
+            data_ = data.iloc[i: i + time_steps].as_matrix()
+            rnn_df.append(data_ if len(data_.shape) > 1 else [[i] for i in data_])
+    return np.array(rnn_df)
+
+X = rnn_data(X,seq_len)
+input_size = np.shape(X)[2]
+
+training_size = int(np.shape(X)[0]*0.8)
 test_size = np.shape(X)[0]-training_size
 
 
@@ -88,6 +86,7 @@ tf.reset_default_graph()
 
 x = tf.placeholder(tf.float32,[None,seq_len, input_size])
 y_target = tf.placeholder(tf.float32,[None, output_size])
+keep_prob = tf.placeholder(tf.float32)
 
 #cell = tf.nn.rnn_cell.LSTMCell(hidden_size,state_is_tuple=True)
 num_layers=2
@@ -101,11 +100,13 @@ last = tf.gather(val, int(val.get_shape()[0]) - 1)
 weight = tf.Variable(tf.truncated_normal([hidden_size, int(y_target.get_shape()[1])]))
 bias = tf.Variable(tf.constant(0.1, shape=[y_target.get_shape()[1]]))
 
-prediction = tf.matmul(last, weight) + bias 
+prediction = tf.matmul(last, weight) + bias
+prediction = tf.nn.dropout(prediction,keep_prob)
 cost = tf.reduce_sum(tf.pow(prediction - y_target, 2)/(2*training_size))
 optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
 minimize = optimizer.minimize(cost)
 test_error = tf.reduce_sum(tf.pow(prediction - y_target,2)/(2*test_size))
+idiot_error = tf.reduce_sum(tf.pow(np.mean(Y)-y_target,2)/(2*np.shape(Y)[0]))
 
 
 # SESSION
@@ -116,23 +117,26 @@ sess.run(init)
 
 batch_size = 10
 no_of_batches = int(training_size / batch_size)
-epoch = 100
-print('APA')
+epoch = 20
 store_train_c = np.zeros(shape=(epoch,1))
 store_test_c = np.zeros(shape = (epoch,1))
+store_idiot_c = np.zeros(shape = (epoch,1))
 for i in range(epoch):
     ptr = 0#?
     for j in range(no_of_batches):
         inp, out = train_data[ptr: ptr+batch_size], train_target[ptr: ptr+batch_size]
         ptr += batch_size
-        sess.run(minimize,{x: inp, y_target: out})
+        sess.run(minimize,feed_dict={x: inp, y_target: out, keep_prob: 0.75})
     print('Epoch ',str(i))#,': Cost ', c )
-    train_c = sess.run(cost,{x: train_data, y_target: train_target})
-    test_c = sess.run(test_error,{x: test_data, y_target: test_target})
+    train_c = sess.run(cost,feed_dict={x: train_data, y_target: train_target, keep_prob:1})
+    test_c = sess.run(test_error,feed_dict={x: test_data, y_target: test_target, keep_prob:1})
+    idiot_c = sess.run(idiot_error,feed_dict={x: X, y_target: Y })
     store_train_c[i] = train_c
     store_test_c[i] = test_c
+    store_idiot_c[i] = idiot_c
     print(train_c)
     print(test_c)
+    print(idiot_c)
 #test_error = sess.run(test_error, {x: test_data, y_target: test_target })
 #print(test_error)
 sess.close()
@@ -141,6 +145,7 @@ sess.close()
 
 plt.plot(store_train_c, linewidth=1, label = "Train")
 plt.plot(store_test_c, linewidth=1, label = "Validation")
+plt.plot(store_idiot_c, linewidth=1, label = "Idiot")
 plt.grid()
 plt.legend()
 plt.show()

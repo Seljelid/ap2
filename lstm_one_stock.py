@@ -29,7 +29,7 @@ data, n_nan, header = read_data(DATA_PATH)
 #print('Number of unique stocks', len(unique))
 
 #%% -----------PARA AND DATA-------------
-data_stock = data[data.xref =='MS:TS69451' ] #'MS:TS10'
+data_stock = data[data.xref == 'MS:TS69451' ] #'MS:TS10' #'MS:TS69451''MS:TS3019'
 header = np.array(list(data_stock))
 X = data_stock[header[3:24]]
 Y = data_stock[header[-3]]
@@ -44,8 +44,9 @@ Y_original = Y
 
 seq_len = 10
 output_size = 1
+dropout_para = 0.5
 hidden_size = 32
-learning_rate = 0.0005
+learning_rate = 0.0001
 
 y_idiot = Y[(seq_len-4):-4,:]
 Y = Y[seq_len:,:]
@@ -120,7 +121,7 @@ sess.run(init)
 
 batch_size = 10
 no_of_batches = int(training_size / batch_size)
-epoch = 50
+epoch = 100
 store_train_c = np.zeros(shape=(epoch,1))
 store_test_c = np.zeros(shape = (epoch,1))
 #store_idiot_c = np.zeros(shape = (epoch,1))
@@ -129,7 +130,7 @@ for i in range(epoch):
     for j in range(no_of_batches):
         inp, out = train_data[ptr: ptr+batch_size], train_target[ptr: ptr+batch_size]
         ptr += batch_size
-        sess.run(minimize,feed_dict={x: inp, y_target: out, keep_prob: 0.5})
+        sess.run(minimize,feed_dict={x: inp, y_target: out, keep_prob: dropout_para})
     print('Epoch ',str(i))#,': Cost ', c )
     train_c = sess.run(cost,feed_dict={x: train_data, y_target: train_target, keep_prob:1})
     test_c = sess.run(test_error,feed_dict={x: test_data, y_target: test_target, keep_prob:1})
@@ -144,7 +145,9 @@ for i in range(epoch):
 #print(test_error)
 sess.close()
 
+#%%
 #%% ------PLOT-------------
+plt.clf()
 idiot1 = np.sum(np.power(np.mean(Y)-Y,2)/(2*np.shape(Y)[0]) )
 idiot2 = np.sum(np.power(y_idiot - Y, 2)/(2*np.shape(Y)[0]) )
 
@@ -153,7 +156,8 @@ def Past_mean(y):
     return(np.expand_dims(y_mean,axis=1))
 
 y_mean_past_4w = Past_mean(Y_original)[seq_len-4:-4]
-idiot3 = np.sum(np.power(y_mean_past_4w - Y, 2)/(2*np.shape(Y)[0]) )     
+idiot3 = np.sum(np.power(y_mean_past_4w - Y, 2)/(2*np.shape(Y)[0]) )  
+   
 
 
 plt.ylabel('MSE')

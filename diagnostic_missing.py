@@ -54,7 +54,29 @@ plt.xlabel('dates')
 plt.title('Missing values for parameters')
 #%%
 
+stocks = data_nan['xref']
+stock_counts = stocks.value_counts()
+unique_weeks = stock_counts.value_counts()
 
+
+stock_count = np.sum([n_stocks if weeks > 1100 else 0 for n_stocks,weeks 
+                      in zip(unique_weeks,unique_weeks.index.values)])
+ 
+#%%    
+plt.clf()
+for i in range(1,21):
+    print(i)
+    
+    y_current = data_stock.iloc[:,i+2]
+    
+    plt.subplot(5,4,i)
+    plt.plot(x_values,y_current, color = 'b')
+    mean = np.mean(y_current)
+    sd = np.std(y_current)
+    plt.axhline(mean, color = 'k', linestyle= '--')
+    plt.axhline(mean + sd, color = 'r', linestyle = '--')
+    plt.axhline(mean - sd, color = 'r', linestyle = '--')
+    plt.title('F' + str(i))
 
 
 

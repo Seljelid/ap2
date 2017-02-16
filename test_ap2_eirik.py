@@ -25,12 +25,13 @@ def read_data(file):
 data, n_nan, header = read_data(DATA_PATH)
 #%% Data pre-processing
 
-data_stock = data[data.xref == 'MS:TS69451' ]
+data_stock = data[data.xref == 'MS:TS604' ]
 X = data_stock[header[3:24]]
 Y = data_stock[header[-3]]
 X = preprocessing.scale(X)
 X = pd.DataFrame(X)
 Y = np.expand_dims(Y,axis = 1)
+print(nps(Y))
 
 def rnn_data(data, time_steps, labels=False):
     """

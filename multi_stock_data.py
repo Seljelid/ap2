@@ -27,7 +27,8 @@ def read_data(file):
 data, n_nan, header = read_data(DATA_PATH)
 #%%
 
-good_stocks = np.array(['MS:TS604','MS:TS1000','MS:TS3551','MS:TS3821'])
+good_stocks = np.array(['MS:TS604','MS:TS1000','MS:TS3551','MS:TS3821',
+                        'MS:TS2014', 'MS:TS2808', 'MS:TS2278', 'MS:TS3262'])
 
 max_dates = 0;
 
@@ -37,8 +38,6 @@ for stock_i in good_stocks:
     current_max_dates = np.shape(data_i)[0]
     if max_dates == 0 or current_max_dates < max_dates:
         max_dates = current_max_dates 
-
-#%% Concat multiple stock data
 
 i = 0
 for stock_i in good_stocks:
@@ -52,10 +51,6 @@ for stock_i in good_stocks:
         df_stocks = data_i
     else:
         df_stocks = pd.concat([df_stocks,data_i],axis=1)
-
-    print('Data i:', nps(data_i))
-    print(nps(df_stocks))
-    
     i += 1
     
 #%%    
@@ -66,29 +61,7 @@ Y = df_stocks[header[-3]].as_matrix()[:,0] # y-value of the first stock
 X = preprocessing.scale(X)
 X = pd.DataFrame(X)
 Y = np.expand_dims(Y,axis = 1)
-print(nps(Y))
 
-def rnn_data(data, time_steps, labels=False):
-    """
-    creates new data frame based on previous observation
-      * example:
-        l = [1, 2, 3, 4, 5]
-        time_steps = 2
-        -> labels == False [[1, 2], [2, 3], [3, 4]]
-        -> labels == True [2, 3, 4, 5]
-    """
-    rnn_df = []
-    for i in range(len(data) - time_steps):
-        if labels:
-            try:
-                rnn_df.append(data.iloc[i + time_steps].as_matrix())
-            except AttributeError:
-                rnn_df.append(data.iloc[i + time_steps])
-        else:
-            data_ = data.iloc[i: i + time_steps].as_matrix()
-            rnn_df.append(data_ if len(data_.shape) > 1 else [[i] for i in data_])
-    return np.array(rnn_df)
-    
 def sequence_data(X,Y,time_steps):
     start = np.shape(X)[1] % time_steps
     X = X.iloc[start:,]
@@ -113,12 +86,12 @@ batch_size = 10
 backprop_length = 10
 input_size = np.shape(X)[-1]
 output_size = 1
-state_size = 32
+state_size = 64
 num_layers = 3
 learning_rate = 0.0001
-dropout_prob = 0.5
-n_epochs = 200
-keep_prob = 0.8
+#dropout_prob = 0.5
+n_epochs = 150
+dropout_prob = 0.8
 
 # Training and test/validation
 #X = rnn_data(X,backprop_length)
@@ -128,7 +101,7 @@ keep_prob = 0.8
 X, Y = sequence_data(X,Y,backprop_length)
 
 input_size = np.shape(X)[2]
-training_size = int(np.shape(X)[0]*0.8)
+training_size = int(np.shape(X)[0]*0.95)
 test_size = np.shape(X)[0]-training_size
 train_data = X[:training_size]
 train_target = Y[:training_size]
@@ -141,6 +114,7 @@ tf.reset_default_graph()
 
 inputs = tf.placeholder(tf.float32, [None, backprop_length , input_size], name = 'x')
 outputs = tf.placeholder(tf.float32, [None, backprop_length, output_size], name = 'y')
+keep_prob = tf.placeholder(tf.float32)
 #cell_state = tf.placeholder(tf.float32, [None, state_size])
 #hidden_state = tf.placeholder(tf.float32, [None, state_size])
 
@@ -185,6 +159,8 @@ zero_state_batch = np.zeros((num_layers, 2, batch_size, state_size))
 zero_state_train = np.zeros((num_layers, 2, training_size, state_size))
 zero_state_test = np.zeros((num_layers, 2, test_size, state_size))
 num_batches = int(training_size / batch_size)
+
+best_model_error = -1;
 for epoch_idx in range(n_epochs):
     #initialize new state each epoch
     #_current_cell_state = zero_state_batch
@@ -199,33 +175,45 @@ for epoch_idx in range(n_epochs):
         y = train_target[start_idx:end_idx, : ]
 
         _current_state,_,_state_out,_pred_out,_out = sess.run([current_state,minimize,state_outputs,prediction,out_reshaped], 
-                                               feed_dict = {inputs: x, outputs: y, init_state: _current_state})
+                                               feed_dict = {inputs: x, outputs: y, init_state: _current_state,keep_prob: dropout_prob})
         # cell_state: _current_cell_state, hidden_state: _current_hidden_state
         #_current_cell_state, _current_hidden_state = _current_state
         
     _epoch_error = sess.run(cost, feed_dict={inputs: train_data, outputs: train_target, 
-                            init_state: zero_state_train })
+                            init_state: zero_state_train , keep_prob: dropout_prob})
+    _test_error,_test_pred = sess.run([error_test,prediction], feed_dict={inputs: test_data, outputs: test_target,
+                                              init_state: zero_state_test, keep_prob: 1})
     train_error_store.append(_epoch_error)
-    _test_error = sess.run(error_test, feed_dict={inputs: test_data, outputs: test_target,
-                                              init_state: zero_state_test})
     test_error_store.append(_test_error)
-    print('Epoch: ', epoch_idx , ', training:  %.2f  test: %.2f' %(_epoch_error, _test_error))
-        
+    print('Epoch: ', epoch_idx , ', training:  %.2f  validation: %.2f' %(_epoch_error, _test_error))
+    
+    if best_model_error > _test_error or best_model_error < 0:
+        best_model_error = _test_error
+        best_prediction = _test_pred
+        best_epoch = epoch_idx
 
 #%%
     
 plt.clf()
-
+plt.subplot(2,1,1)
 plt.ylabel('MSE')
 plt.xlabel('Epoch')
 plt.title('learn rate = %s, batch = %s, time steps = %s'
           %(learning_rate,batch_size,backprop_length) )
 plt.plot(train_error_store, linewidth=1, label = "Train")
 plt.plot(test_error_store, linewidth=1, label = "Validation")
-
+plt.plot(best_epoch, best_model_error, 'ro')
 plt.grid()
 plt.legend()
 plt.show()
+plt.subplot(2,1,2)
+x = range(len(best_prediction))
+plt.plot(x, best_prediction,color = 'goldenrod',label = "Prediction")
+plt.plot(x, np.reshape(test_target,[-1]),color = 'steelblue', label = "Target")
+plt.title('best model prediction')
+plt.legend()
+
+
 
 
 

@@ -25,7 +25,7 @@ def read_data(file):
 data_nan, n_nan, header = read_data(DATA_PATH)
 
 #%%
-data_stock = data_nan[data_nan.xref == 'MS:TS1438' ]
+data_stock = data_nan[data_nan.xref == 'MS:TS2278']#'MS:TS1438' 
 num = 24
 
 dates = np.unique(data_stock.date)
@@ -51,7 +51,7 @@ plt.ylim(0,26)
 xlabels = header[3:]
 plt.yticks(range(1,num+1), xlabels)
 plt.xlabel('dates')
-plt.title('Missing values for parameters')
+plt.title('Missing values. dates: %0.0f' %(len(dates)))
 #%%
 
 stocks = data_nan['xref']

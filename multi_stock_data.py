@@ -90,7 +90,7 @@ state_size = 64
 num_layers = 3
 learning_rate = 0.0001
 #dropout_prob = 0.5
-n_epochs = 150
+n_epochs = 100
 dropout_prob = 0.8
 
 # Training and test/validation
@@ -107,6 +107,9 @@ train_data = X[:training_size]
 train_target = Y[:training_size]
 test_data = X[training_size:]
 test_target = Y[training_size:]
+
+
+
 
 #%% MODEL, TENSORFLOW
 tf.reset_default_graph()
@@ -193,6 +196,12 @@ for epoch_idx in range(n_epochs):
         best_epoch = epoch_idx
 
 #%%
+past_return , new_target = predict_past_return(test_target)
+mse_past_return = mse_error(past_return,new_target)
+
+past_mean, new_target = predict_past_mean(test_target)
+mse_past_mean = mse_error(past_mean, new_target)
+#past_mean, new_target = predict_past_return
     
 plt.clf()
 plt.subplot(2,1,1)
@@ -203,18 +212,39 @@ plt.title('learn rate = %s, batch = %s, time steps = %s'
 plt.plot(train_error_store, linewidth=1, label = "Train")
 plt.plot(test_error_store, linewidth=1, label = "Validation")
 plt.plot(best_epoch, best_model_error, 'ro')
+plt.axhline(mse_past_return,color = 'orange',label = "Past return", linestyle = "--")
+plt.axhline(mse_past_mean, color = 'lightcoral', label = "Past mean", linestyle = "--")
 plt.grid()
 plt.legend()
 plt.show()
 plt.subplot(2,1,2)
 x = range(len(best_prediction))
-plt.plot(x, best_prediction,color = 'goldenrod',label = "Prediction")
+plt.plot(x, best_prediction,color = 'g',label = "Prediction")
 plt.plot(x, np.reshape(test_target,[-1]),color = 'steelblue', label = "Target")
+#plt.plot(x, np.append([None,None,None,None],past_mean), color = 'lightcoral', label = "Past mean")
+plt.axhline(0,color = 'y', linestyle = "--")
 plt.title('best model prediction')
 plt.legend()
 
+#%%
 
-
-
-
+def mse_error(x1,x2):
+    dx = x1-x2
+    mse = np.sum(np.power(dx,2)) / len(dx)
+    return mse
+    
+def predict_past_return(target, weeks = 4):
+    if len(np.shape(target)) > 1:
+        target = np.reshape(target,[-1])
+    past_return = target[:-weeks]
+    new_target = target[weeks:]
+    return past_return, new_target
+    
+def predict_past_mean(target, weeks = 4):
+    if len(np.shape(target)) > 1:
+        target = np.reshape(target,[-1])
+    past_return = target[:-weeks]
+    past_mean = np.cumsum(past_return)/np.linspace(1,len(past_return),len(past_return))
+    new_target = target[weeks:]
+    return past_mean, new_target
 

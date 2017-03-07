@@ -52,6 +52,8 @@ xlabels = header[3:]
 plt.yticks(range(1,num+1), xlabels)
 plt.xlabel('dates')
 plt.title('Missing values. dates: %0.0f' %(len(dates)))
+
+
 #%%
 
 stocks = data_nan['xref']
@@ -61,8 +63,75 @@ unique_weeks = stock_counts.value_counts()
 
 stock_count = np.sum([n_stocks if weeks > 1100 else 0 for n_stocks,weeks 
                       in zip(unique_weeks,unique_weeks.index.values)])
+
+
  
 #%%    
+def get_stocks_min_weeks(data, min_number_of_weeks):
+    stocks = data['xref']
+    stock_counts = stocks.value_counts()
+    stocks_of_min_weeks = stock_counts[stock_counts.values >= min_number_of_weeks]
+    
+    return(stocks_of_min_weeks)
+def plot_missing_values(data, stock_name):
+
+    data_stock = data[data.xref == stock_name]#'MS:TS1438' 
+    num = 24
+    
+    dates = np.unique(data_stock.date)
+    x_values = np.array(range(len(dates)))
+    
+    y_values = np.array([None]*len(dates))
+    y_values = np.array( [y_values, ]*num)
+    #y_values = np.zeros(len(dates))
+    #y_values(data_stock.F1.isnull()) = 1 
+    for i in range(num):
+        y_current = y_values[i]
+        nan_idx  =  np.array(data_stock.iloc[:,i+3].isnull())
+        y_values[i,nan_idx] = i+1
+    
+    plt.clf()
+    
+    for i in range(num):
+        plt.plot(x_values,y_values[i,:], 'ro')
+    plt.xlim(0,len(dates))
+    plt.ylim(0,26)
+    
+    xlabels = header[3:]
+    plt.yticks(range(1,num+1), xlabels)
+    plt.xlabel('dates')
+    plt.title('Missing values. dates: %0.0f' %(len(dates)))
+    
+    plt.show()
+    return(None)
+    
+#%%
+
+store_good_stocks = pd.Series(data = None, index = [None])
+stocks_min_weeks = get_stocks_min_weeks(data_nan, 1100)
+
+for stock_name_i in stocks_min_weeks.index:
+    
+    plt.clf()
+    plot_missing_values(data_nan, stock_name_i)
+    good_or_bad = []
+
+    while good_or_bad != 1 or good_or_bad != 0:
+        good_or_bad = input(stock_name_i + ', good(1) or bad (0): ')
+    
+    if good_or_bad == 1:
+        
+        good_stock = stocks_min_weeks[stocks_min_weeks.index == stock_name_i]
+        store_good_stocks = store_good_stocks.append(good_stock)
+        
+        
+    
+
+    
+
+#%%
+
+
 plt.clf()
 for i in range(1,21):
     print(i)

@@ -16,7 +16,7 @@ def read_data(file):
     with open(file) as file:
         df = pd.read_csv(file, delimiter=',', low_memory='false')
         n_nan = df.isnull().sum()   #count number of NaN
-        df.fillna(value=0,inplace='true')  #fill NaN with zero. Don't do this for now
+        #df.fillna(value=0,inplace='true')  #fill NaN with zero. Don't do this for now
         header = list(df)
         data = df
         #data = df.as_matrix()
@@ -25,10 +25,20 @@ def read_data(file):
     return data, n_nan, header
 
 data, n_nan, header = read_data(DATA_PATH)
+
+#%%
+stocks = data['xref']
+stock_counts = stocks.value_counts()
+min_weeks = np.percentile(stock_counts,95) #over the 70th percentile
+stock_counts_70 = stock_counts[stock_counts >= min_weeks]
+stocks_70 = np.array(stock_counts_70.index.values.tolist())
+
+
 #%%
 
-good_stocks = np.array(['MS:TS604','MS:TS1000','MS:TS3551','MS:TS3821',
-                        'MS:TS2014', 'MS:TS2808', 'MS:TS2278', 'MS:TS3262'])
+#good_stocks = np.array(['MS:TS604','MS:TS1000','MS:TS3551','MS:TS3821',
+                        #'MS:TS2014', 'MS:TS2808', 'MS:TS2278', 'MS:TS3262'])
+good_stocks = stocks_70[30:70]
 
 max_dates = 0;
 
@@ -41,7 +51,6 @@ for stock_i in good_stocks:
 
 i = 0
 for stock_i in good_stocks:
-    print(stock_i)
     
     data_i = data[data.xref == stock_i]
     data_i.set_index('date', inplace = True)
@@ -52,18 +61,41 @@ for stock_i in good_stocks:
     else:
         df_stocks = pd.concat([df_stocks,data_i],axis=1)
     i += 1
-    
+
+#%% Fill in missing values
+
+factors = header[3:]
+
+for factor in factors:
+    df_factor = df_stocks[factor]
+    df_factor = df_factor.T
+    df_factor = df_factor.fillna(df_factor.mean())
+    df_factor = df_factor.T
+    df_stocks[factor] = df_factor
+             
+df_stocks.fillna(value=0, inplace = True)
+
 #%%    
     
 X = df_stocks[header[3:24]]
 Y = df_stocks[header[-3]].as_matrix()[:,0] # y-value of the first stock
-#Y = pd.DataFrame(Y)
+
+# Add previous returns, remove first 4
+Z4 = df_stocks[header[25]]
+Z4  = Z4.iloc[:-4,:]
+X = X.iloc[4:,:]
+Y = Y[4:]
+Z4 =  Z4.set_index( X.index )
+X = pd.concat([X,Z4],axis = 1)
+
 X = preprocessing.scale(X)
 X = pd.DataFrame(X)
 Y = np.expand_dims(Y,axis = 1)
+X, Y = X.iloc[:-4,:], Y[:-4]
+
 
 def sequence_data(X,Y,time_steps):
-    start = np.shape(X)[1] % time_steps
+    start = np.shape(X)[0] % time_steps
     X = X.iloc[start:,]
     Y = Y[start:]
     
@@ -75,6 +107,8 @@ def sequence_data(X,Y,time_steps):
         Y_current = Y[i*time_steps:(i+1)*time_steps]
         rnn_data.append(X_current)
         rnn_targets.append(Y_current)
+        #print(Y_current[-1])
+        #print(rnn_targets[-1])
         #rnn_data=  X[i*time_steps:(i+1)*time_steps, ]
     
     return np.array(rnn_data), np.array(rnn_targets)
@@ -86,7 +120,7 @@ batch_size = 10
 backprop_length = 10
 input_size = np.shape(X)[-1]
 output_size = 1
-state_size = 64
+state_size = 128
 num_layers = 3
 learning_rate = 0.0001
 #dropout_prob = 0.5
@@ -195,7 +229,7 @@ for epoch_idx in range(n_epochs):
         best_prediction = _test_pred
         best_epoch = epoch_idx
 
-#%%
+ #%%
 past_return , new_target = predict_past_return(test_target)
 mse_past_return = mse_error(past_return,new_target)
 
@@ -210,7 +244,7 @@ plt.xlabel('Epoch')
 plt.title('learn rate = %s, batch = %s, time steps = %s'
           %(learning_rate,batch_size,backprop_length) )
 plt.plot(train_error_store, linewidth=1, label = "Train")
-plt.plot(test_error_store, linewidth=1, label = "Validation")
+plt.plot(test_error_store, linewidth=1, label = "Validation", color = "green")
 plt.plot(best_epoch, best_model_error, 'ro')
 plt.axhline(mse_past_return,color = 'orange',label = "Past return", linestyle = "--")
 plt.axhline(mse_past_mean, color = 'lightcoral', label = "Past mean", linestyle = "--")
@@ -219,7 +253,8 @@ plt.legend()
 plt.show()
 plt.subplot(2,1,2)
 x = range(len(best_prediction))
-plt.plot(x, best_prediction,color = 'g',label = "Prediction")
+plt.plot(x, best_prediction,color = 'g',label = "Best-pred")
+plt.plot(x, _test_pred,color = 'black',label = "Last-pred")
 plt.plot(x, np.reshape(test_target,[-1]),color = 'steelblue', label = "Target")
 #plt.plot(x, np.append([None,None,None,None],past_mean), color = 'lightcoral', label = "Past mean")
 plt.axhline(0,color = 'y', linestyle = "--")

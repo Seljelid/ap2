@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from sklearn import preprocessing
 from diagnostic_missing import read_data
 
-DATA_PATH = '../Data/ai_dataset2.csv'
+DATA_PATH = '../Data/data_good.csv'
 
 data_nan, n_nan, header = read_data(DATA_PATH)
 

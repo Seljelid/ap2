@@ -25,7 +25,7 @@ def read_data(file):
 data_nan, n_nan, header = read_data(DATA_PATH)
 
 #%%
-data_stock = data_nan[data_nan.xref == 'MS:TS2278']#'MS:TS1438' 
+data_stock = data_nan[data_nan.xref == 'MS:TS480']#'MS:TS1438' 
 num = 24
 
 dates = np.unique(data_stock.date)
@@ -89,49 +89,121 @@ def plot_missing_values(data, stock_name):
         y_current = y_values[i]
         nan_idx  =  np.array(data_stock.iloc[:,i+3].isnull())
         y_values[i,nan_idx] = i+1
-    
-    plt.clf()
-    
+
     for i in range(num):
         plt.plot(x_values,y_values[i,:], 'ro')
+    #plt.plot(x_values,y_values, 'ro')
+        
     plt.xlim(0,len(dates))
     plt.ylim(0,26)
     
     xlabels = header[3:]
     plt.yticks(range(1,num+1), xlabels)
     plt.xlabel('dates')
-    plt.title('Missing values. dates: %0.0f' %(len(dates)))
+    plt.title(stock_name + ' missing values. Dates: %0.0f' %(len(dates)))
     
-    plt.show()
+    
+    #plt.draw()
     return(None)
+    
+def get_missing_x_y(data, stock_name):
+    data_stock = data[data.xref == stock_name]#'MS:TS1438' 
+    num = 24
+    
+    dates = np.unique(data_stock.date)
+    x_values = np.array(range(len(dates)))
+    
+    y_values = np.array([None]*len(dates))
+    y_values = np.array( [y_values, ]*num)
+    #y_values = np.zeros(len(dates))
+    #y_values(data_stock.F1.isnull()) = 1 
+    for i in range(num):
+        y_current = y_values[i]
+        nan_idx  =  np.array(data_stock.iloc[:,i+3].isnull())
+        y_values[i,nan_idx] = i+1
+    return(x_values, y_values)
+    
     
 #%%
 
 store_good_stocks = pd.Series(data = None, index = [None])
 stocks_min_weeks = get_stocks_min_weeks(data_nan, 1100)
 
+plt.ion()
+fig = plt.figure()
+
 for stock_name_i in stocks_min_weeks.index:
     
     plt.clf()
-    plot_missing_values(data_nan, stock_name_i)
+    #plot_missing_values(data_nan, stock_name_i)
+    #plt.draw()
+    
+    x,y = get_missing_x_y(data_nan, stock_name_i)
+    
+    plt.axis([0,len(x),0,y.shape[0]])
+    
+    for i in range(y.shape[0]):
+        plt.scatter(x, y[i,:],color = 'r')
+        plt.show()
+        plt.pause(0.0001)
+        #plt.flush_events()
+    
+    ylabels = header[3:]
+    plt.yticks(range(1,y.shape[0]+1), ylabels)
+    plt.xlabel('dates')
+    plt.title(stock_name_i + ' missing values. Dates: %0.0f' %(stocks_min_weeks[stock_name_i]))    
+
     good_or_bad = []
 
-    while good_or_bad != 1 or good_or_bad != 0:
+    while good_or_bad != 1 and good_or_bad != 0:
         good_or_bad = input(stock_name_i + ', good(1) or bad (0): ')
+        
+        try:
+            good_or_bad = int(good_or_bad)
+        except ValueError:
+            good_or_bad = []
     
     if good_or_bad == 1:
         
         good_stock = stocks_min_weeks[stocks_min_weeks.index == stock_name_i]
         store_good_stocks = store_good_stocks.append(good_stock)
-        
-        
-    
 
-    
+      
+path = '../Data/'
+store_good_stocks.to_csv(path + 'good_stocks.csv')
 
 #%%
 
+data_good = pd.DataFrame(data = None, columns = data_nan.columns)
+for stock_i in store_good_stocks.index:
+    data_stock_i = data_nan[data_nan.xref == stock_i]
+    data_good = data_good.append(data_stock_i)
 
+path = '../Data/'
+data_good.to_csv(path + 'data_good.csv',index = False)
+    
+#%%
+x, y = get_missing_x_y(data_nan, 'MS:TS712')
+
+plt.ion()
+fig = plt.figure()
+plt.axis([0,len(x),0,y.shape[0]])
+
+for i in range(y.shape[0]):
+    plt.scatter(x, y[i,:],color = 'r')
+    plt.show()
+    plt.pause(0.05)
+    #plt.flush_events()
+
+xlabels = header[3:]
+plt.yticks(range(1,num+1), xlabels)
+plt.xlabel('dates')
+plt.title(stock_name + ' missing values. Dates: %0.0f' %(len(dates)))    
+plt.title(stock_name + ' missing values. Dates: %0.0f' %(len(dates)))
+
+
+
+#%%
 plt.clf()
 for i in range(1,21):
     print(i)

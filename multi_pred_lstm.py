@@ -1,5 +1,6 @@
 #%%
 import numpy as np
+import numpy.matlib
 import csv
 import pandas as pd
 from datetime import datetime as dt
@@ -70,7 +71,7 @@ df_stocks = fill_missing(data,header)
 
 #%%    
 X = df_stocks[header[3:24]]
-Y = df_stocks[header[-2]].as_matrix() # y-value of the first stock
+Y = df_stocks[header[-3]].as_matrix() # y-value of the first stock
 
 # Add previous returns, remove first 4
 Z4 = df_stocks[header[25]]
@@ -201,7 +202,7 @@ mse_past_return = mse_error(past_return,new_target)
 past_mean, new_target = predict_past_mean(test_target)
 mse_past_mean = mse_error(past_mean, new_target)
 
-stock_to_plot = 19
+stock_to_plot = 1
 n_pred_weeks = np.shape(test_target)[0]*np.shape(test_target)[1]
     
 plt.clf()
@@ -252,3 +253,54 @@ def predict_past_mean(target, weeks = 4):
     new_target = target[weeks:]
     return past_mean, new_target
 
+#%%
+weekly_returns = np.reshape(best_prediction,[n_pred_weeks,-1])
+real_returns = np.reshape(test_target,[n_pred_weeks,-1])
+sorted_returns = np.argsort(weekly_returns)
+ratings = np.arange(1,233)
+ratings = ratings/np.sum(ratings)
+#ratings = np.matlib.repmat(ratings,60,1)
+
+#i = 0
+
+#for ratings_row, returns_row in zip(ratings,sorted_returns):
+#   ratings[i,:] = ratings_row[returns_row]
+#   i += 1
+    
+real_returns_per_week = np.mean(real_returns, axis = 1)
+
+#%%
+value = 1000000
+value_vector = np.zeros([n_pred_weeks])
+
+i = 0
+for weekly_return in real_returns_per_week:
+    value = value + weekly_return*value/100
+    value_vector[i] = value
+    i += 1
+ 
+val = 1000000
+val_vector = np.zeros([n_pred_weeks])
+i = 0
+for weekly_return, sorted_return in zip(real_returns,sorted_returns):
+    return_vector = weekly_return[sorted_return]
+    ret = np.dot(return_vector,ratings)
+    val += ret*val/100
+    val_vector[i] = val
+    i += 1
+    
+cray_val = 1000000
+cray_vector = np.zeros([n_pred_weeks])
+i = 0
+for weekly_return, sorted_return in zip(real_returns, sorted_returns):
+    cray_val = cray_val + weekly_return[sorted_return[-20]]*cray_val/100
+    cray_vector[i] = cray_val
+    i += 1
+    
+plt.clf()
+plt.ylabel('Value')
+plt.xlabel('Week')
+plt.plot(value_vector,label='Uniform')
+plt.plot(val_vector, label='Seljelid & Bostrom Inc.')
+#plt.plot(cray_vector,label='Trading monkey')
+plt.legend()

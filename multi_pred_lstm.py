@@ -202,7 +202,7 @@ mse_past_return = mse_error(past_return,new_target)
 past_mean, new_target = predict_past_mean(test_target)
 mse_past_mean = mse_error(past_mean, new_target)
 
-stock_to_plot = 1
+stock_to_plot = 4
 n_pred_weeks = np.shape(test_target)[0]*np.shape(test_target)[1]
     
 plt.clf()
@@ -270,37 +270,53 @@ ratings = ratings/np.sum(ratings)
 real_returns_per_week = np.mean(real_returns, axis = 1)
 
 #%%
-value = 1000000
-value_vector = np.zeros([n_pred_weeks])
+value = 1
+value_vector = np.ones([15])
 
 i = 0
+j = 1
+k = 0
 for weekly_return in real_returns_per_week:
-    value = value + weekly_return*value/100
-    value_vector[i] = value
+    if np.mod(i,4) == 0:
+        value = value + real_returns_per_week[j-4]*value/100
+        value_vector[k] = value
+        k += 1
     i += 1
+    j += 1
  
-val = 1000000
-val_vector = np.zeros([n_pred_weeks])
+val = 1
+val_vector = np.ones([15])
 i = 0
+j = 1
+k = 0
+weighted = np.array([])
+ret_vector = np.zeros([n_pred_weeks+1])
 for weekly_return, sorted_return in zip(real_returns,sorted_returns):
     return_vector = weekly_return[sorted_return]
     ret = np.dot(return_vector,ratings)
-    val += ret*val/100
-    val_vector[i] = val
+    weighted = np.append(weighted,ret)
+    ret_vector[j] = ret
+    if np.mod(i,4) == 0:
+        val += ret_vector[j-4]*val/100
+        val_vector[k] = val
+        k += 1
+    #else:
+        #val_vector[i+1] = val_vector[i]
     i += 1
+    j+= 1
     
-cray_val = 1000000
-cray_vector = np.zeros([n_pred_weeks])
+cray_val = 1
+cray_vector = np.ones([n_pred_weeks+1])
 i = 0
 for weekly_return, sorted_return in zip(real_returns, sorted_returns):
-    cray_val = cray_val + weekly_return[sorted_return[-20]]*cray_val/100
-    cray_vector[i] = cray_val
+    cray_val = cray_val + weekly_return[sorted_return[-1]]*cray_val/100
+    cray_vector[i+1] = cray_val
     i += 1
     
 plt.clf()
 plt.ylabel('Value')
 plt.xlabel('Week')
-plt.plot(value_vector,label='Uniform')
-plt.plot(val_vector, label='Seljelid & Bostrom Inc.')
-#plt.plot(cray_vector,label='Trading monkey')
+plt.plot(np.arange(1,60,4),value_vector,label='Uniform')
+plt.plot(np.arange(1,60,4),val_vector, label='Seljelid & Bostrom Inc.')
+#plt.plot(cray_vector,label='Only best stock')
 plt.legend()

@@ -8,7 +8,7 @@ import random
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
 
-DATA_PATH = '../Data/ai_dataset2.csv'
+DATA_PATH = '../Data/data_good.csv'
 
 def read_data(file):
     with open(file) as file:
@@ -27,6 +27,23 @@ data, n_nan, header = read_data(DATA_PATH)
 #print(n_nan/np.shape(data[0::,1]))
 #unique, counts = np.unique(data[:,2], return_counts='True')
 #print('Number of unique stocks', len(unique))
+
+#%%
+
+factors = header[3:]
+
+data_missing = data.copy(deep = True)
+
+for factor in factors:
+    data_factor = data[factor]
+    data_factor = data_factor.T
+    data_factor = data_factor.fillna(data_factor.mean())
+    data_factor = data_factor.T
+    data[factor] = data_factor
+             
+data.fillna(value=0, inplace = True)
+
+data.to_csv('../Data/data_pro.csv', index = False )
 
 #%% -----------PARA AND DATA-------------
 data_stock = data[data.xref == 'MS:TS69451' ] #'MS:TS10' #'MS:TS69451''MS:TS3019'

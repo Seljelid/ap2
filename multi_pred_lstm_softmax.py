@@ -112,7 +112,7 @@ state_size = 512
 num_layers = 2
 learning_rate = 0.001
 #dropout_prob = 0.5
-n_epochs = 2
+n_epochs = 100
 dropout_prob = 0.8
 
 X, Y = sequence_data(X,Y,backprop_length)
@@ -131,7 +131,6 @@ tf.reset_default_graph()
 
 inputs = tf.placeholder(tf.float32, [None, backprop_length , input_size], name = 'x')
 outputs = tf.placeholder(tf.float32, [None, backprop_length, output_size], name = 'y')
-current_timesteps = tf.placeholder(tf.int32)
 keep_prob = tf.placeholder(tf.float32)
 
 #Initialize
@@ -150,33 +149,31 @@ bias = tf.Variable(tf.truncated_normal([output_size]))
 #the model
 state_outputs_reshaped = tf.reshape(state_outputs,[tf.shape(inputs)[0]*backprop_length,state_size])
 prediction_orig = tf.matmul(state_outputs_reshaped, weight) + bias
+                           
 
-#prediction_softmax = tf.nn.softmax(prediction_orig, dim=1, name=None)
 
+prediction_softmax = tf.nn.softmax(prediction_orig)
 
 
 #one_hot_out = tf.one_hot(out_matrix ,depth = output_size , )
 
 
 
-prediction = tf.reshape(prediction_orig,[-1])
-out_retard = tf.reshape(outputs,[-1, output_size])
-
-
-out_reshaped = tf.reshape(outputs, [-1])
-
-out_argmax = tf.argmax(out_retard, axis = 1)
-out_one_hot = tf.one_hot(out_argmax, output_size, axis = 1 )
+#prediction = tf.reshape(prediction_orig,[-1], name = 'Prediction')
+out_retard = tf.reshape(outputs,[-1, output_size], name = 'Retard')
 out_softmax = tf.nn.softmax(out_retard)
 
-prediction = tf.reshape(out_one_hot,[-1])
-out_reshaped = tf.reshape(out_softmax,[-1])
-#ko = tf.nn.softmax_cross_entropy_with_logits(labels = out_one_hot, logits = out_retard, dim = -1)
-#cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = out_one_hot, logits = out_retard, dim = -1))
-cost = tf.reduce_sum(tf.pow(prediction-out_reshaped, 2)/(2*training_size*backprop_length*output_size))
+#out_reshaped = tf.reshape(outputs, [-1])
+
+#out_argmax = tf.argmax(out_retard, axis = 1, name = 'Argmax')
+#out_one_hot = tf.one_hot(out_argmax, output_size, axis = 1 )
+
+#one_hot_reshaped = tf.reshape(out_one_hot,[-1], name = 'out_re')
+#out_reshaped = tf.reshape(out_softmax,[-1])
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = prediction_orig, labels = out_softmax))
+#cost = tf.reduce_sum(tf.pow(prediction-out_reshaped, 2)/(2*training_size*backprop_length*output_size))
 optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
 minimize = optimizer.minimize(cost)
-error_test = tf.reduce_sum(tf.pow(prediction-out_reshaped,2)/(2*test_size*backprop_length*output_size))
 
 #Session
 sess = tf.Session()
@@ -199,17 +196,13 @@ for epoch_idx in range(n_epochs):
         end_idx =  (batch_idx + 1) * batch_size
         x = train_data[start_idx:end_idx, : , :]
         y = train_target[start_idx:end_idx, : ]
-        batch_time = y.shape[0]*y.shape[1]
 
-        _current_state,_,_state_out,_pred_out,_ko = sess.run([current_state,minimize,state_outputs,prediction_orig,ko], 
-                                               feed_dict = {inputs: x, outputs: y,current_timesteps: batch_time ,init_state: _current_state,keep_prob: dropout_prob})
-        print(_ko)
-        print(_out.shape)
-    epoch_time = train_target.shape[0]*train_target.shape[1]    
-    _epoch_error = sess.run(cost, feed_dict={inputs: train_data, outputs: train_target, current_timesteps: epoch_time,
+        _current_state,_,_state_out,_pred_out = sess.run([current_state,minimize,state_outputs,prediction_orig], 
+                                               feed_dict = {inputs: x, outputs: y,init_state: _current_state,keep_prob: dropout_prob})
+        
+    _epoch_error = sess.run(cost, feed_dict={inputs: train_data, outputs: train_target,
                             init_state: zero_state_train , keep_prob: dropout_prob})
-    test_time = test_target.shape[0]*test_target.shape[1]
-    _test_error,_test_pred,out_ = sess.run([error_test,prediction,out_reshaped], feed_dict={inputs: test_data, outputs: test_target, current_timesteps: test_time, 
+    _test_error,_test_pred,test_out = sess.run([cost,prediction_softmax,out_softmax], feed_dict={inputs: test_data, outputs: test_target, 
                                               init_state: zero_state_test, keep_prob: 1})
     train_error_store.append(_epoch_error)
     test_error_store.append(_test_error)
@@ -217,7 +210,6 @@ for epoch_idx in range(n_epochs):
     
     if best_model_error > _test_error or best_model_error < 0:
         best_model_error = _test_error
-        best_prediction = _test_pred
         best_epoch = epoch_idx
 
 #%%

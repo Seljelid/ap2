@@ -202,7 +202,7 @@ for epoch_idx in range(n_epochs):
         
     _epoch_error = sess.run(cost, feed_dict={inputs: train_data, outputs: train_target,
                             init_state: zero_state_train , keep_prob: dropout_prob})
-    _test_error,_test_pred,test_out = sess.run([cost,prediction_softmax,out_softmax], feed_dict={inputs: test_data, outputs: test_target, 
+    _test_error,_test_pred,_test_out = sess.run([cost,prediction_softmax,out_softmax], feed_dict={inputs: test_data, outputs: test_target, 
                                               init_state: zero_state_test, keep_prob: 1})
     train_error_store.append(_epoch_error)
     test_error_store.append(_test_error)
@@ -210,6 +210,7 @@ for epoch_idx in range(n_epochs):
     
     if best_model_error > _test_error or best_model_error < 0:
         best_model_error = _test_error
+        best_prediction = _test_pred
         best_epoch = epoch_idx
 
 #%%
@@ -276,7 +277,8 @@ real_returns = np.reshape(test_target,[n_pred_weeks,-1])
 sorted_returns = np.argsort(weekly_returns)
 ratings = np.arange(1,233)
 ratings = ratings/np.sum(ratings)
-#ratings = np.matlib.repmat(ratings,60,1)
+#ratings = best_prediction
+#ratings = np.matlib.repmat(ratings,60,1)'
 
 #i = 0
 
@@ -301,6 +303,27 @@ for weekly_return in real_returns_per_week:
     i += 1
     j += 1
  
+#val = 1
+#val_vector = np.ones([15])
+#i = 0
+#j = 1
+#k = 0
+#weighted = np.array([])
+#ret_vector = np.zeros([n_pred_weeks+1])
+#for weekly_return, sorted_return in zip(real_returns,sorted_returns):
+#    return_vector = weekly_return[sorted_return]
+#    ret = np.dot(return_vector,ratings)
+#    weighted = np.append(weighted,ret)
+#    ret_vector[j] = ret
+#    if np.mod(i,4) == 0:
+#        val += ret_vector[j-4]*val/100
+#        val_vector[k] = val
+#        k += 1
+#    #else:
+#        #val_vector[i+1] = val_vector[i]
+#    i += 1
+#    j+= 1
+
 val = 1
 val_vector = np.ones([15])
 i = 0
@@ -308,9 +331,9 @@ j = 1
 k = 0
 weighted = np.array([])
 ret_vector = np.zeros([n_pred_weeks+1])
-for weekly_return, sorted_return in zip(real_returns,sorted_returns):
-    return_vector = weekly_return[sorted_return]
-    ret = np.dot(return_vector,ratings)
+for weekly_return, best_pred in zip(real_returns,best_prediction):
+    #return_vector = weekly_return[sorted_return]
+    ret = np.dot(weekly_return,best_pred)
     weighted = np.append(weighted,ret)
     ret_vector[j] = ret
     if np.mod(i,4) == 0:

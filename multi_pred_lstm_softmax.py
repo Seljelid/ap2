@@ -110,15 +110,15 @@ input_size = np.shape(X)[-1]
 output_size = np.shape(Y)[-1]
 state_size = 512
 num_layers = 2
-learning_rate = 0.001
+learning_rate = 0.0005
 #dropout_prob = 0.5
-n_epochs = 100
+n_epochs = 200
 dropout_prob = 0.8
 
 X, Y = sequence_data(X,Y,backprop_length)
 
 input_size = np.shape(X)[2]
-training_size = int(np.shape(X)[0]*0.95)
+training_size = int(np.shape(X)[0]*0.90)
 test_size = np.shape(X)[0]-training_size
 train_data = X[:training_size]
 train_target = Y[:training_size]
@@ -135,13 +135,13 @@ keep_prob = tf.placeholder(tf.float32)
 
 #Initialize
 init_state = tf.placeholder(tf.float32, [num_layers, 2, None, state_size])
-state_per_layer_list = tf.unpack(init_state, axis=0)
+state_per_layer_list = tf.unstack(init_state, axis=0)
 rnn_tuple_state = tuple(
-    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
+    [tf.contrib.rnn.core_rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
      for idx in range(num_layers)])
-cell = tf.nn.rnn_cell.LSTMCell(state_size, state_is_tuple = True)
-cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob = keep_prob)
-cell = tf.nn.rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
+cell = tf.contrib.rnn.core_rnn_cell.LSTMCell(state_size, state_is_tuple = True)
+cell = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(cell,output_keep_prob = keep_prob)
+cell = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
 state_outputs, current_state =  tf.nn.dynamic_rnn(cell, inputs, initial_state = rnn_tuple_state)#init_state
 weight = tf.Variable(tf.truncated_normal([state_size, output_size]))
 bias = tf.Variable(tf.truncated_normal([output_size]))
@@ -290,7 +290,7 @@ real_returns_per_week = np.mean(real_returns, axis = 1)
 
 #%%
 value = 1
-value_vector = np.ones([15])
+value_vector = np.ones([int(n_pred_weeks/4)])
 
 i = 0
 j = 1
@@ -325,7 +325,7 @@ for weekly_return in real_returns_per_week:
 #    j+= 1
 
 val = 1
-val_vector = np.ones([15])
+val_vector = np.ones([int(n_pred_weeks/4)])
 i = 0
 j = 1
 k = 0
@@ -345,6 +345,24 @@ for weekly_return, best_pred in zip(real_returns,best_prediction):
     i += 1
     j+= 1
     
+opt_val = 1
+opt_val_vector = np.ones([int(n_pred_weeks/4)])
+i = 0
+j = 1
+k = 0
+weighted = np.array([])
+ret_vector = np.zeros([n_pred_weeks+1])
+for weekly_return, opt_weight in zip(real_returns,_test_out):
+    ret = np.dot(weekly_return,opt_weight)
+    weighted = np.append(weighted,ret)
+    ret_vector[j] = ret
+    if np.mod(i,4) == 0:
+        val += ret_vector[j-4]*val/100
+        opt_val_vector[k] = val
+        k += 1
+    i += 1
+    j += 1
+
 cray_val = 1
 cray_vector = np.ones([n_pred_weeks+1])
 i = 0
@@ -356,7 +374,8 @@ for weekly_return, sorted_return in zip(real_returns, sorted_returns):
 plt.clf()
 plt.ylabel('Value')
 plt.xlabel('Week')
-plt.plot(np.arange(1,60,4),value_vector,label='Uniform')
-plt.plot(np.arange(1,60,4),val_vector, label='Seljelid & Bostrom Inc.')
+plt.plot(np.arange(0,n_pred_weeks,4),value_vector/value_vector[0],label='Uniform')
+plt.plot(np.arange(0,n_pred_weeks,4),val_vector/val_vector[0], label='Seljelid & Bostrom Inc.')
+plt.plot(np.arange(0,n_pred_weeks,4),opt_val_vector/opt_val_vector[0], label = 'Optimal portfolio (softmax)')
 #plt.plot(cray_vector,label='Only best stock')
 plt.legend()

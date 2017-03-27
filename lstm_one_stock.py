@@ -1,5 +1,3 @@
-#%% -----------DATA-------------
-import numpy as np
 import csv
 import pandas as pd
 from datetime import datetime as dt
@@ -8,45 +6,22 @@ import random
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
 
-DATA_PATH = '../Data/data_good.csv'
+#DATA_PATH = '../Data/ai_dataset2.csv'
+DATA_PATH = '../Data/data_pro.csv'
 
 def read_data(file):
     with open(file) as file:
         df = pd.read_csv(file, delimiter=',', low_memory='false')
         n_nan = df.isnull().sum()   #count number of NaN
-        df.fillna(value=0,inplace='true')  #fill NaN with zero. Don't do this for now
         header = list(df)
         data = df
-        #data = df.as_matrix()
-        #for row in data:
-        #   row[1] = dt.strptime(row[1],'%d%b%Y') #create datetime objects
     return data, n_nan, header
 
 data, n_nan, header = read_data(DATA_PATH)
-#print(data[-15000:-14990,:])
-#print(n_nan/np.shape(data[0::,1]))
-#unique, counts = np.unique(data[:,2], return_counts='True')
-#print('Number of unique stocks', len(unique))
-
-#%%
-
-factors = header[3:]
-
-data_missing = data.copy(deep = True)
-
-for factor in factors:
-    data_factor = data[factor]
-    data_factor = data_factor.T
-    data_factor = data_factor.fillna(data_factor.mean())
-    data_factor = data_factor.T
-    data[factor] = data_factor
-             
-data.fillna(value=0, inplace = True)
-
-data.to_csv('../Data/data_pro.csv', index = False )
-
 #%% -----------PARA AND DATA-------------
-data_stock = data[data.xref == 'MS:TS69451' ] #'MS:TS10' #'MS:TS69451''MS:TS3019'
+
+stock_id = np.unique(data.xref)[0]
+data_stock = data[data.xref == stock_id] #'MS:TS10' #'MS:TS69451''MS:TS3019'
 header = np.array(list(data_stock))
 X = data_stock[header[3:24]]
 Y = data_stock[header[-3]]
@@ -148,15 +123,15 @@ for i in range(epoch):
         inp, out = train_data[ptr: ptr+batch_size], train_target[ptr: ptr+batch_size]
         ptr += batch_size
         sess.run(minimize,feed_dict={x: inp, y_target: out, keep_prob: dropout_para})
-    print('Epoch ',str(i))#,': Cost ', c )
+    #print('Epoch ',str(i)),': Cost ', c )
     train_c = sess.run(cost,feed_dict={x: train_data, y_target: train_target, keep_prob:1})
     test_c = sess.run(test_error,feed_dict={x: test_data, y_target: test_target, keep_prob:1})
     idiot_c = sess.run(idiot_error,feed_dict={x: X, y_target: Y })
     store_train_c[i] = train_c
     store_test_c[i] = test_c
     #store_idiot_c[i] = idiot_c
-    print(train_c)
-    print(test_c)
+    print('Epoch: ', i , ', training:  %.2f  validation: %.2f' %(train_c, test_c))
+    #print(test_c)
     #print(idiot_c)
 #test_error = sess.run(test_error, {x: test_data, y_target: test_target })
 #print(test_error)

@@ -21,6 +21,7 @@ def read_data(file):
     return data, n_nan, header
 
 data, n_nan, header = read_data(DATA_PATH)
+data['date'] = pd.to_datetime(data['date'], format='%d%b%Y')
 
 #%%
 def concat_features(data):
@@ -74,19 +75,19 @@ X = df_stocks[header[3:24]]
 Y = df_stocks[header[-3]].as_matrix() # y-value of the first stock
 
 # Add previous returns, remove first 4
-Z4 = df_stocks[header[25]]
+Z4 = df_stocks[header[24]]
 Z4  = Z4.iloc[:-4,:]
 X = X.iloc[4:,:]
 Y = Y[4:]
 Z4 =  Z4.set_index( X.index )
 X = pd.concat([X,Z4],axis = 1)
 
-X = preprocessing.scale(X)
-X = pd.DataFrame(X)
+#X = preprocessing.scale(X)
+#X = pd.DataFrame(X)
 #Y = np.expand_dims(Y,axis = 1)
 X, Y = X.iloc[:-4,:], Y[:-4]
 
-
+#%%
 def sequence_data(X,Y,time_steps):
     start = np.shape(X)[0] % time_steps
     X = X.iloc[start:,]
@@ -104,12 +105,12 @@ def sequence_data(X,Y,time_steps):
     
 # PARA AND DATASETS
 #parameters
-batch_size = 10
+batch_size = 20
 backprop_length = 10
 input_size = np.shape(X)[-1]
 output_size = np.shape(Y)[-1]
 state_size = 512
-num_layers = 2
+num_layers = 4
 learning_rate = 0.0005
 #dropout_prob = 0.5
 n_epochs = 200
@@ -150,28 +151,14 @@ bias = tf.Variable(tf.truncated_normal([output_size]))
 state_outputs_reshaped = tf.reshape(state_outputs,[tf.shape(inputs)[0]*backprop_length,state_size])
 prediction_orig = tf.matmul(state_outputs_reshaped, weight) + bias
                            
-
-
 prediction_softmax = tf.nn.softmax(prediction_orig)
-
 
 #one_hot_out = tf.one_hot(out_matrix ,depth = output_size , )
 
-
-
-#prediction = tf.reshape(prediction_orig,[-1], name = 'Prediction')
 out_retard = tf.reshape(outputs,[-1, output_size], name = 'Retard')
 out_softmax = tf.nn.softmax(out_retard)
 
-#out_reshaped = tf.reshape(outputs, [-1])
-
-#out_argmax = tf.argmax(out_retard, axis = 1, name = 'Argmax')
-#out_one_hot = tf.one_hot(out_argmax, output_size, axis = 1 )
-
-#one_hot_reshaped = tf.reshape(out_one_hot,[-1], name = 'out_re')
-#out_reshaped = tf.reshape(out_softmax,[-1])
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = prediction_orig, labels = out_softmax))
-#cost = tf.reduce_sum(tf.pow(prediction-out_reshaped, 2)/(2*training_size*backprop_length*output_size))
 optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
 minimize = optimizer.minimize(cost)
 
@@ -290,7 +277,7 @@ real_returns_per_week = np.mean(real_returns, axis = 1)
 
 #%%
 value = 1
-value_vector = np.ones([int(n_pred_weeks/4)])
+soft_value_vector = np.ones([int(n_pred_weeks/4)])
 
 i = 0
 j = 1
@@ -298,7 +285,7 @@ k = 0
 for weekly_return in real_returns_per_week:
     if np.mod(i,4) == 0:
         value = value + real_returns_per_week[j-4]*value/100
-        value_vector[k] = value
+        soft_value_vector[k] = value
         k += 1
     i += 1
     j += 1
@@ -325,7 +312,7 @@ for weekly_return in real_returns_per_week:
 #    j+= 1
 
 val = 1
-val_vector = np.ones([int(n_pred_weeks/4)])
+soft_val_vector = np.ones([int(n_pred_weeks/4)])
 i = 0
 j = 1
 k = 0
@@ -338,7 +325,7 @@ for weekly_return, best_pred in zip(real_returns,best_prediction):
     ret_vector[j] = ret
     if np.mod(i,4) == 0:
         val += ret_vector[j-4]*val/100
-        val_vector[k] = val
+        soft_val_vector[k] = val
         k += 1
     #else:
         #val_vector[i+1] = val_vector[i]
@@ -346,7 +333,7 @@ for weekly_return, best_pred in zip(real_returns,best_prediction):
     j+= 1
     
 opt_val = 1
-opt_val_vector = np.ones([int(n_pred_weeks/4)])
+soft_opt_val_vector = np.ones([int(n_pred_weeks/4)])
 i = 0
 j = 1
 k = 0
@@ -358,7 +345,7 @@ for weekly_return, opt_weight in zip(real_returns,_test_out):
     ret_vector[j] = ret
     if np.mod(i,4) == 0:
         val += ret_vector[j-4]*val/100
-        opt_val_vector[k] = val
+        soft_opt_val_vector[k] = val
         k += 1
     i += 1
     j += 1
@@ -374,8 +361,8 @@ for weekly_return, sorted_return in zip(real_returns, sorted_returns):
 plt.clf()
 plt.ylabel('Value')
 plt.xlabel('Week')
-plt.plot(np.arange(0,n_pred_weeks,4),value_vector/value_vector[0],label='Uniform')
-plt.plot(np.arange(0,n_pred_weeks,4),val_vector/val_vector[0], label='Seljelid & Bostrom Inc.')
-plt.plot(np.arange(0,n_pred_weeks,4),opt_val_vector/opt_val_vector[0], label = 'Optimal portfolio (softmax)')
+plt.plot(np.arange(0,n_pred_weeks,4),soft_value_vector/soft_value_vector[0],label='Uniform')
+plt.plot(np.arange(0,n_pred_weeks,4),soft_val_vector/soft_val_vector[0], label='LSTM softmax dist')
+#plt.plot(np.arange(0,n_pred_weeks,4),soft_opt_val_vector/soft_opt_val_vector[0], label = 'Optimal portfolio (softmax)')
 #plt.plot(cray_vector,label='Only best stock')
 plt.legend()

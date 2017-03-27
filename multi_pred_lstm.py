@@ -21,6 +21,7 @@ def read_data(file):
     return data, n_nan, header
 
 data, n_nan, header = read_data(DATA_PATH)
+data['date'] = pd.to_datetime(data['date'], format='%d%b%Y')
 
 #%%
 def concat_features(data):
@@ -53,28 +54,27 @@ def concat_features(data):
 df_stocks = concat_features(data)
 
 #%% Fill in missing values
-def fill_missing(data,header):
+def fill_missing(df,header):
     factors = header[3:]
 
     for factor in factors:
-        df_factor = df_stocks[factor]
+        df_factor = df[factor]
         df_factor = df_factor.T
         df_factor = df_factor.fillna(df_factor.mean())
         df_factor = df_factor.T
-        df_stocks[factor] = df_factor
+        df[factor] = df_factor
                  
-    df_stocks.fillna(value=0, inplace = True)
+    df.fillna(value=0, inplace = True)
     
-    return df_stocks
+    return df
 
-df_stocks = fill_missing(data,header)
+df_stocks = fill_missing(df_stocks,header)
 
 #%%    
 X = df_stocks[header[3:24]]
-Y = df_stocks[header[-3]].as_matrix() # y-value of the first stock
-
+Y = df_stocks[header[-3]].as_matrix()
 # Add previous returns, remove first 4
-Z4 = df_stocks[header[25]]
+Z4 = df_stocks[header[24]]
 Z4  = Z4.iloc[:-4,:]
 X = X.iloc[4:,:]
 Y = Y[4:]
@@ -85,7 +85,6 @@ X = preprocessing.scale(X)
 X = pd.DataFrame(X)
 #Y = np.expand_dims(Y,axis = 1)
 X, Y = X.iloc[:-4,:], Y[:-4]
-
 
 def sequence_data(X,Y,time_steps):
     start = np.shape(X)[0] % time_steps
@@ -105,7 +104,7 @@ def sequence_data(X,Y,time_steps):
 # PARA AND DATASETS
 #parameters
 batch_size = 10
-backprop_length = 10
+backprop_length = 4
 input_size = np.shape(X)[-1]
 output_size = np.shape(Y)[-1]
 state_size = 512
@@ -113,12 +112,11 @@ num_layers = 2
 learning_rate = 0.001
 #dropout_prob = 0.5
 n_epochs = 100
-dropout_prob = 0.8
+dropout_prob = 0.6
 
 X, Y = sequence_data(X,Y,backprop_length)
-
 input_size = np.shape(X)[2]
-training_size = int(np.shape(X)[0]*0.95)
+training_size = int(np.shape(X)[0]*0.90)
 test_size = np.shape(X)[0]-training_size
 train_data = X[:training_size]
 train_target = Y[:training_size]
@@ -135,13 +133,13 @@ keep_prob = tf.placeholder(tf.float32)
 
 #Initialize
 init_state = tf.placeholder(tf.float32, [num_layers, 2, None, state_size])
-state_per_layer_list = tf.unpack(init_state, axis=0)
+state_per_layer_list = tf.unstack(init_state, axis=0)
 rnn_tuple_state = tuple(
-    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
+    [tf.contrib.rnn.core_rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
      for idx in range(num_layers)])
-cell = tf.nn.rnn_cell.LSTMCell(state_size, state_is_tuple = True)
-cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob = keep_prob)
-cell = tf.nn.rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
+cell = tf.contrib.rnn.core_rnn_cell.LSTMCell(state_size, state_is_tuple = True)
+cell = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(cell,output_keep_prob = keep_prob)
+cell = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
 state_outputs, current_state =  tf.nn.dynamic_rnn(cell, inputs, initial_state = rnn_tuple_state)#init_state
 weight = tf.Variable(tf.truncated_normal([state_size, output_size]))
 bias = tf.Variable(tf.truncated_normal([output_size]))
@@ -202,7 +200,7 @@ mse_past_return = mse_error(past_return,new_target)
 past_mean, new_target = predict_past_mean(test_target)
 mse_past_mean = mse_error(past_mean, new_target)
 
-stock_to_plot = 4
+stock_to_plot = 6
 n_pred_weeks = np.shape(test_target)[0]*np.shape(test_target)[1]
     
 plt.clf()
@@ -257,6 +255,7 @@ def predict_past_mean(target, weeks = 4):
 weekly_returns = np.reshape(best_prediction,[n_pred_weeks,-1])
 real_returns = np.reshape(test_target,[n_pred_weeks,-1])
 sorted_returns = np.argsort(weekly_returns)
+sorted_real_returns = np.argsort(real_returns)
 ratings = np.arange(1,233)
 ratings = ratings/np.sum(ratings)
 #ratings = np.matlib.repmat(ratings,60,1)
@@ -271,7 +270,7 @@ real_returns_per_week = np.mean(real_returns, axis = 1)
 
 #%%
 value = 1
-value_vector = np.ones([15])
+value_vector = np.ones([int(n_pred_weeks/4)])
 
 i = 0
 j = 1
@@ -285,7 +284,7 @@ for weekly_return in real_returns_per_week:
     j += 1
  
 val = 1
-val_vector = np.ones([15])
+val_vector = np.ones([int(n_pred_weeks/4)])
 i = 0
 j = 1
 k = 0
@@ -305,6 +304,27 @@ for weekly_return, sorted_return in zip(real_returns,sorted_returns):
     i += 1
     j+= 1
     
+opt_val = 1
+opt_val_vector = np.ones([int(n_pred_weeks/4)])
+i = 0
+j = 1
+k = 0
+weighted = np.array([])
+ret_vector = np.zeros([n_pred_weeks+1])
+for weekly_return, sorted_return in zip(real_returns,sorted_real_returns):
+    return_vector = weekly_return[sorted_return]
+    ret = np.dot(return_vector,ratings)
+    weighted = np.append(weighted,ret)
+    ret_vector[j] = ret
+    if np.mod(i,4) == 0:
+        val += ret_vector[j-4]*val/100
+        opt_val_vector[k] = val
+        k += 1
+    #else:
+        #val_vector[i+1] = val_vector[i]
+    i += 1
+    j += 1
+    
 cray_val = 1
 cray_vector = np.ones([n_pred_weeks+1])
 i = 0
@@ -314,9 +334,14 @@ for weekly_return, sorted_return in zip(real_returns, sorted_returns):
     i += 1
     
 plt.clf()
-plt.ylabel('Value')
+plt.ylabel('Return')
 plt.xlabel('Week')
-plt.plot(np.arange(1,60,4),value_vector,label='Uniform')
-plt.plot(np.arange(1,60,4),val_vector, label='Seljelid & Bostrom Inc.')
+plt.plot(np.arange(1,n_pred_weeks,4),value_vector/value_vector[0],label='Uniform (index)')
+plt.plot(np.arange(1,n_pred_weeks,4),val_vector/val_vector[0], label='Linear rating by LSTM return')
+#plt.plot(np.arange(1,n_pred_weeks,4),opt_val_vector/opt_val_vector[0], label='Optimal linear rating')
+#plt.plot(np.arange(1,n_pred_weeks,4),soft_val_vector/soft_val_vector[0], label='LSTM softmax dist')
+#plt.plot(np.arange(1,n_pred_weeks,4),soft_opt_val_vector/soft_opt_val_vector[0], label='Optimal softmax dist')
 #plt.plot(cray_vector,label='Only best stock')
+plt.grid()
 plt.legend()
+plt.show()

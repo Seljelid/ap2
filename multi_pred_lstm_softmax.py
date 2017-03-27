@@ -1,4 +1,3 @@
-#%%
 import numpy as np
 import numpy.matlib
 import csv
@@ -21,73 +20,65 @@ def read_data(file):
     return data, n_nan, header
 
 data, n_nan, header = read_data(DATA_PATH)
-data['date'] = pd.to_datetime(data['date'], format='%d%b%Y')
+data['date'] = pd.to_datetime(data['date'], format='%d%b%Y')#Correct date format
+data.set_index('date', inplace = True)#Dates as index
 
 #%%
-def concat_features(data):
-    good_stocks = np.unique(data['xref'])
 
-    max_dates = 0;
-
-    for stock_i in good_stocks:
-        
-        data_i = data[data.xref == stock_i]
-        current_max_dates = np.shape(data_i)[0]
-        if max_dates == 0 or current_max_dates < max_dates:
-            max_dates = current_max_dates 
+def concat_data(data): #concats, by column, stock data. Missing dates gives NA.
+    stock_ids = np.unique(data.xref)
     
     i = 0
-    for stock_i in good_stocks:
+    for stock_i in stock_ids:
+        data_i = data[data.xref==stock_i]
         
-        data_i = data[data.xref == stock_i]
-        data_i.set_index('date', inplace = True)
-        start_idx = np.shape(data_i)[0] - max_dates 
-        data_i = data_i.iloc[start_idx:, :]
         if i == 0:
-            df_stocks = data_i
-        else:
-            df_stocks = pd.concat([df_stocks,data_i],axis=1)
-        i += 1
+            df = data_i
+        else: 
+            df = pd.concat([df,data_i], axis = 1)
+        i = 1
         
-    return df_stocks
-
-df_stocks = concat_features(data)
-
-#%% Fill in missing values
-def fill_missing(data,header):
+    return(df)
+    
+def fill_missing(df,header):#Fill with mean if available otherwise 0
     factors = header[3:]
 
     for factor in factors:
-        df_factor = df_stocks[factor]
+        df_factor = df[factor]
         df_factor = df_factor.T
         df_factor = df_factor.fillna(df_factor.mean())
         df_factor = df_factor.T
-        df_stocks[factor] = df_factor
+        df[factor] = df_factor
                  
-    df_stocks.fillna(value=0, inplace = True)
+    df.fillna(value=0, inplace = True)
     
-    return df_stocks
+    return df
 
-df_stocks = fill_missing(data,header)
 
-#%%    
-X = df_stocks[header[3:24]]
-Y = df_stocks[header[-3]].as_matrix() # y-value of the first stock
+def create_X_Y(data_conc, header): #Creates X and Y data, also returns the order of stocks
+    #TODO: add the last known return value to X
+    features = header[3:24]
+    X = data_conc[features]
+    
+    targets = header[24]
+    Y = data_conc[targets]
 
-# Add previous returns, remove first 4
-Z4 = df_stocks[header[24]]
-Z4  = Z4.iloc[:-4,:]
-X = X.iloc[4:,:]
-Y = Y[4:]
-Z4 =  Z4.set_index( X.index )
-X = pd.concat([X,Z4],axis = 1)
-
-#X = preprocessing.scale(X)
-#X = pd.DataFrame(X)
-#Y = np.expand_dims(Y,axis = 1)
-X, Y = X.iloc[:-4,:], Y[:-4]
-
+    stock_order = data_conc['xref'].iloc[0,:]
+    
+    return X,Y,stock_order
+    
+    
+data_concat = concat_data(data)
+df = fill_missing(data_concat, header)
+ix, why, stock_order = create_X_Y(df, header)
 #%%
+
+X = preprocessing.scale(ix)
+X = pd.DataFrame(X)
+X = ix
+Y = np.expand_dims(why,axis = 1)
+#X, Y = X.iloc[:-4,:], Y[:-4]
+
 def sequence_data(X,Y,time_steps):
     start = np.shape(X)[0] % time_steps
     X = X.iloc[start:,]
@@ -101,25 +92,24 @@ def sequence_data(X,Y,time_steps):
         rnn_targets.append(Y_current)
     
     return np.array(rnn_data), np.array(rnn_targets)
-    
-    
+        
 # PARA AND DATASETS
 #parameters
-batch_size = 20
+batch_size = 10
 backprop_length = 10
 input_size = np.shape(X)[-1]
 output_size = np.shape(Y)[-1]
 state_size = 512
-num_layers = 4
-learning_rate = 0.0005
+num_layers = 2
+learning_rate = 0.0001
 #dropout_prob = 0.5
 n_epochs = 200
 dropout_prob = 0.8
 
 X, Y = sequence_data(X,Y,backprop_length)
-
+Y = np.squeeze(Y)
 input_size = np.shape(X)[2]
-training_size = int(np.shape(X)[0]*0.90)
+training_size = int(np.shape(X)[0]*0.95)
 test_size = np.shape(X)[0]-training_size
 train_data = X[:training_size]
 train_target = Y[:training_size]

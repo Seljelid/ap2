@@ -1,4 +1,3 @@
-#%%
 import numpy as np
 import numpy.matlib
 import csv
@@ -21,40 +20,27 @@ def read_data(file):
     return data, n_nan, header
 
 data, n_nan, header = read_data(DATA_PATH)
-data['date'] = pd.to_datetime(data['date'], format='%d%b%Y')
+data['date'] = pd.to_datetime(data['date'], format='%d%b%Y')#Correct date format
+data.set_index('date', inplace = True)#Dates as index
 
 #%%
-def concat_features(data):
-    good_stocks = np.unique(data['xref'])
 
-    max_dates = 0;
-
-    for stock_i in good_stocks:
-        
-        data_i = data[data.xref == stock_i]
-        current_max_dates = np.shape(data_i)[0]
-        if max_dates == 0 or current_max_dates < max_dates:
-            max_dates = current_max_dates 
+def concat_data(data): #concats, by column, stock data. Missing dates gives NA.
+    stock_ids = np.unique(data.xref)
     
     i = 0
-    for stock_i in good_stocks:
+    for stock_i in stock_ids:
+        data_i = data[data.xref==stock_i]
         
-        data_i = data[data.xref == stock_i]
-        data_i.set_index('date', inplace = True)
-        start_idx = np.shape(data_i)[0] - max_dates 
-        data_i = data_i.iloc[start_idx:, :]
         if i == 0:
-            df_stocks = data_i
-        else:
-            df_stocks = pd.concat([df_stocks,data_i],axis=1)
-        i += 1
+            df = data_i
+        else: 
+            df = pd.concat([df,data_i], axis = 1)
+        i = 1
         
-    return df_stocks
-
-df_stocks = concat_features(data)
-
-#%% Fill in missing values
-def fill_missing(df,header):
+    return(df)
+    
+def fill_missing(df,header):#Fill with mean if available otherwise 0
     factors = header[3:]
 
     for factor in factors:
@@ -68,23 +54,29 @@ def fill_missing(df,header):
     
     return df
 
-df_stocks = fill_missing(df_stocks,header)
 
-#%%    
-X = df_stocks[header[3:24]]
-Y = df_stocks[header[-3]].as_matrix()
-# Add previous returns, remove first 4
-Z4 = df_stocks[header[24]]
-Z4  = Z4.iloc[:-4,:]
-X = X.iloc[4:,:]
-Y = Y[4:]
-Z4 =  Z4.set_index( X.index )
-X = pd.concat([X,Z4],axis = 1)
+def create_X_Y(data_conc, header): #Creates X and Y data, also returns the order of stocks
+    #TODO: add the last known return value to X
+    features = header[3:24]
+    X = data_conc[features]
+    
+    targets = header[24]
+    Y = data_conc[targets]
 
-X = preprocessing.scale(X)
+    stock_order = data_conc['xref'].iloc[0,:]
+    
+    return X,Y,stock_order
+    
+    
+data_concat = concat_data(data)
+df = fill_missing(data_concat, header)
+x,y,stock_order = create_X_Y(df, header)
+#%%
+
+X = preprocessing.scale(x)
 X = pd.DataFrame(X)
-#Y = np.expand_dims(Y,axis = 1)
-X, Y = X.iloc[:-4,:], Y[:-4]
+y = np.expand_dims(y,axis = 1)
+#X, Y = X.iloc[:-4,:], Y[:-4]
 
 def sequence_data(X,Y,time_steps):
     start = np.shape(X)[0] % time_steps
@@ -104,9 +96,9 @@ def sequence_data(X,Y,time_steps):
 # PARA AND DATASETS
 #parameters
 batch_size = 10
-backprop_length = 4
+backprop_length = 10
 input_size = np.shape(X)[-1]
-output_size = np.shape(Y)[-1]
+output_size = np.shape(y)[-1]
 state_size = 512
 num_layers = 2
 learning_rate = 0.001
@@ -114,7 +106,8 @@ learning_rate = 0.001
 n_epochs = 100
 dropout_prob = 0.6
 
-X, Y = sequence_data(X,Y,backprop_length)
+X, Y = sequence_data(X,y,backprop_length)
+Y = np.squeeze(Y)
 input_size = np.shape(X)[2]
 training_size = int(np.shape(X)[0]*0.90)
 test_size = np.shape(X)[0]-training_size
@@ -200,7 +193,7 @@ mse_past_return = mse_error(past_return,new_target)
 past_mean, new_target = predict_past_mean(test_target)
 mse_past_mean = mse_error(past_mean, new_target)
 
-stock_to_plot = 6
+stock_to_plot = 1
 n_pred_weeks = np.shape(test_target)[0]*np.shape(test_target)[1]
     
 plt.clf()
@@ -339,7 +332,7 @@ plt.xlabel('Week')
 plt.plot(np.arange(1,n_pred_weeks,4),value_vector/value_vector[0],label='Uniform (index)')
 plt.plot(np.arange(1,n_pred_weeks,4),val_vector/val_vector[0], label='Linear rating by LSTM return')
 #plt.plot(np.arange(1,n_pred_weeks,4),opt_val_vector/opt_val_vector[0], label='Optimal linear rating')
-#plt.plot(np.arange(1,n_pred_weeks,4),soft_val_vector/soft_val_vector[0], label='LSTM softmax dist')
+plt.plot(np.arange(1,n_pred_weeks,4),soft_val_vector/soft_val_vector[0], label='LSTM softmax dist')
 #plt.plot(np.arange(1,n_pred_weeks,4),soft_opt_val_vector/soft_opt_val_vector[0], label='Optimal softmax dist')
 #plt.plot(cray_vector,label='Only best stock')
 plt.grid()

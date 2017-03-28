@@ -29,8 +29,33 @@ data.set_index('date', inplace = True)#Dates as index
 dates = np.unique(data.index)
 features = list(data)[2:23]
 
+data_feature_rank = pd.DataFrame([])
+data_rank = pd.DataFrame([])
+data_weights = pd.DataFrame([])
 for date_i in dates:
     data_date = data[data.index == date_i]
+    stocks = data_date.xref
+    data_date = data_date[features]
+
     order = np.argsort(data_date, axis = 0)
-    rank = np.argsort(order, axis = 0)
-    print(rank['F1'].iloc[0:10], data_date['F1'][0:10])
+    feature_rank = np.argsort(order, axis = 0)
+    stock_rank = np.sum(feature_rank, axis = 1)
+    
+    if data_rank.empty:
+        #data_feature_rank = feature_rank
+        tmp = pd.concat([stocks, stock_rank],axis = 1)
+        tmp = tmp.iloc[np.argsort(tmp.iloc[:,1]),:]#Sort by ranking
+        tmp['weights'] = np.arange(1,len(stock_rank)+1)/np.sum(np.arange(1,len(stock_rank)+1))
+    
+        data_rank = tmp
+        
+        
+    else: 
+        
+        tmp = pd.concat([stocks, stock_rank],axis = 1)
+        tmp = tmp.iloc[np.argsort(tmp.iloc[:,1]),:]
+        tmp['weights'] = np.arange(1,len(stock_rank)+1)/np.sum(np.arange(1,len(stock_rank)+1))
+        data_rank = pd.concat([data_rank,tmp],axis = 0)
+
+
+

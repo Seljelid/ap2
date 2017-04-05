@@ -75,8 +75,7 @@ ix, why, stock_order = create_X_Y(df, header)
 
 X = preprocessing.scale(ix)
 X = pd.DataFrame(X)
-X = ix
-Y = np.expand_dims(why,axis = 1)
+y = np.expand_dims(why,axis = 1)
 #X, Y = X.iloc[:-4,:], Y[:-4]
 
 def sequence_data(X,Y,time_steps):
@@ -99,22 +98,25 @@ batch_size = 10
 backprop_length = 10
 input_size = np.shape(X)[-1]
 output_size = np.shape(Y)[-1]
-state_size = 512
+state_size = 256
 num_layers = 2
 learning_rate = 0.0001
 #dropout_prob = 0.5
-n_epochs = 200
-dropout_prob = 0.8
+n_epochs = 100
+dropout_prob = 0.7
 
-X, Y = sequence_data(X,Y,backprop_length)
+X, Y = sequence_data(X,y,backprop_length)
 Y = np.squeeze(Y)
 input_size = np.shape(X)[2]
-training_size = int(np.shape(X)[0]*0.95)
-test_size = np.shape(X)[0]-training_size
+training_size = int(np.shape(X)[0]*0.80)
+test_size = int((np.shape(X)[0]-training_size)/2)
+validation_size = test_size
 train_data = X[:training_size]
 train_target = Y[:training_size]
-test_data = X[training_size:]
-test_target = Y[training_size:]
+validation_data = X[training_size:training_size+validation_size]
+validation_target = Y[training_size:training_size+validation_size]
+test_data = X[training_size+validation_size:training_size+validation_size+test_size]
+test_target = Y[training_size+validation_size:training_size+validation_size+test_size]
 
 #%% MODEL, TENSORFLOW
 tf.reset_default_graph()
@@ -134,8 +136,8 @@ cell = tf.contrib.rnn.core_rnn_cell.LSTMCell(state_size, state_is_tuple = True)
 cell = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(cell,output_keep_prob = keep_prob)
 cell = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
 state_outputs, current_state =  tf.nn.dynamic_rnn(cell, inputs, initial_state = rnn_tuple_state)#init_state
-weight = tf.Variable(tf.truncated_normal([state_size, output_size]))
-bias = tf.Variable(tf.truncated_normal([output_size]))
+weight = tf.Variable(tf.truncated_normal([state_size, output_size], mean = 0.0, stddev = 0.3))
+bias = tf.Variable(tf.truncated_normal([output_size], mean = 0.0, stddev = 0.3))
 
 #the model
 state_outputs_reshaped = tf.reshape(state_outputs,[tf.shape(inputs)[0]*backprop_length,state_size])
@@ -143,12 +145,19 @@ prediction_orig = tf.matmul(state_outputs_reshaped, weight) + bias
                            
 prediction_softmax = tf.nn.softmax(prediction_orig)
 
-#one_hot_out = tf.one_hot(out_matrix ,depth = output_size , )
+l2 = tf.nn.l2_loss(weight)
+
+#one_hot_out = tf.one_hot(out_matrix ,depth = output_size)
 
 out_retard = tf.reshape(outputs,[-1, output_size], name = 'Retard')
 out_softmax = tf.nn.softmax(out_retard)
 
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = prediction_orig, labels = out_softmax))
+out_argmax = tf.argmax(out_retard, axis = 1, name = 'Argmax')
+out_one_hot = tf.one_hot(out_argmax, output_size, axis = 1 )
+
+reward = -tf.reduce_sum((tf.multiply(prediction_softmax, out_retard)))
+
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = prediction_orig, labels = out_one_hot) + 0.0005*l2)
 optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
 minimize = optimizer.minimize(cost)
 
@@ -156,14 +165,16 @@ minimize = optimizer.minimize(cost)
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
 train_error_store = []
-test_error_store = []
+validation_error_store = []
 
 zero_state_batch = np.zeros((num_layers, 2, batch_size, state_size))
 zero_state_train = np.zeros((num_layers, 2, training_size, state_size))
+zero_state_validation = np.zeros((num_layers, 2, validation_size, state_size))
 zero_state_test = np.zeros((num_layers, 2, test_size, state_size))
 num_batches = int(training_size / batch_size)
 
 best_model_error = -1;
+best_reward = -10000000000000000000
 for epoch_idx in range(n_epochs):
     
     for batch_idx in range(num_batches):
@@ -179,17 +190,26 @@ for epoch_idx in range(n_epochs):
         
     _epoch_error = sess.run(cost, feed_dict={inputs: train_data, outputs: train_target,
                             init_state: zero_state_train , keep_prob: dropout_prob})
-    _test_error,_test_pred,_test_out = sess.run([cost,prediction_softmax,out_softmax], feed_dict={inputs: test_data, outputs: test_target, 
-                                              init_state: zero_state_test, keep_prob: 1})
+    _validation_error,_validation_pred,_validation_out, _reward = sess.run([cost,prediction_softmax,out_softmax, reward],
+                            feed_dict={inputs: validation_data, outputs: validation_target, init_state:
+                            zero_state_validation, keep_prob: 1})
     train_error_store.append(_epoch_error)
-    test_error_store.append(_test_error)
-    print('Epoch: ', epoch_idx , ', training:  %.2f  validation: %.2f' %(_epoch_error, _test_error))
+    validation_error_store.append(_validation_error)
+    print('Epoch: ', epoch_idx , ', training:  %.2f  validation: %.2f' %(_epoch_error, _validation_error))
     
-    if best_model_error > _test_error or best_model_error < 0:
-        best_model_error = _test_error
-        best_prediction = _test_pred
+    if best_model_error > _validation_error or best_model_error < 0:
+        best_model_error = _validation_error
+        best_prediction = _validation_pred
         best_epoch = epoch_idx
-
+    
+    if _reward > best_reward:
+        print(epoch_idx)
+        _test_error,_test_pred = sess.run([cost,prediction_softmax], feed_dict={inputs: test_data, outputs: test_target,
+                                              init_state: zero_state_test, keep_prob: 1})
+        
+        best_reward = _reward
+    
+print('Test error: %.2f' %(_test_error))
 #%%
 past_return , new_target = predict_past_return(test_target)
 mse_past_return = mse_error(past_return,new_target)
@@ -207,7 +227,7 @@ plt.xlabel('Epoch')
 plt.title('learn rate = %s, batch = %s, time steps = %s'
           %(learning_rate,batch_size,backprop_length) )
 plt.plot(train_error_store, linewidth=1, label = "Train")
-plt.plot(test_error_store, linewidth=1, label = "Validation", color = "green")
+plt.plot(validation_error_store, linewidth=1, label = "Validation", color = "green")
 plt.plot(best_epoch, best_model_error, 'ro')
 plt.axhline(mse_past_return,color = 'orange',label = "Past return", linestyle = "--")
 plt.axhline(mse_past_mean, color = 'lightcoral', label = "Past mean", linestyle = "--")
@@ -217,7 +237,7 @@ plt.show()
 plt.subplot(2,1,2)
 # = range(len(best_prediction)/232)
 x = range(n_pred_weeks)
-plt.plot(x, best_prediction[stock_to_plot*n_pred_weeks:stock_to_plot*n_pred_weeks+n_pred_weeks], color = 'g', label = "Best-pred")
+plt.plot(x, _test_pred[stock_to_plot*n_pred_weeks:stock_to_plot*n_pred_weeks+n_pred_weeks], color = 'g', label = "Best-pred")
 plt.plot(x, np.reshape(test_target[:,:,stock_to_plot],[-1]), color = 'steelblue', label = "Target")
 #plt.plot(x, best_prediction,color = 'g',label = "Best-pred")
 #plt.plot(x, _test_pred,color = 'black',label = "Last-pred")
@@ -249,110 +269,28 @@ def predict_past_mean(target, weeks = 4):
     return past_mean, new_target
 
 #%%
-weekly_returns = np.reshape(best_prediction,[n_pred_weeks,-1])
+pred_dist = np.reshape(best_prediction,[n_pred_weeks,-1])
 real_returns = np.reshape(test_target,[n_pred_weeks,-1])
-sorted_returns = np.argsort(weekly_returns)
-ratings = np.arange(1,233)
-ratings = ratings/np.sum(ratings)
-#ratings = best_prediction
-#ratings = np.matlib.repmat(ratings,60,1)'
-
-#i = 0
-
-#for ratings_row, returns_row in zip(ratings,sorted_returns):
-#   ratings[i,:] = ratings_row[returns_row]
-#   i += 1
-    
-real_returns_per_week = np.mean(real_returns, axis = 1)
-
-#%%
-value = 1
-soft_value_vector = np.ones([int(n_pred_weeks/4)])
 
 i = 0
-j = 1
-k = 0
-for weekly_return in real_returns_per_week:
-    if np.mod(i,4) == 0:
-        value = value + real_returns_per_week[j-4]*value/100
-        soft_value_vector[k] = value
-        k += 1
-    i += 1
-    j += 1
- 
-#val = 1
-#val_vector = np.ones([15])
-#i = 0
-#j = 1
-#k = 0
-#weighted = np.array([])
-#ret_vector = np.zeros([n_pred_weeks+1])
-#for weekly_return, sorted_return in zip(real_returns,sorted_returns):
-#    return_vector = weekly_return[sorted_return]
-#    ret = np.dot(return_vector,ratings)
-#    weighted = np.append(weighted,ret)
-#    ret_vector[j] = ret
-#    if np.mod(i,4) == 0:
-#        val += ret_vector[j-4]*val/100
-#        val_vector[k] = val
-#        k += 1
-#    #else:
-#        #val_vector[i+1] = val_vector[i]
-#    i += 1
-#    j+= 1
-
-val = 1
-soft_val_vector = np.ones([int(n_pred_weeks/4)])
-i = 0
-j = 1
-k = 0
-weighted = np.array([])
-ret_vector = np.zeros([n_pred_weeks+1])
-for weekly_return, best_pred in zip(real_returns,best_prediction):
-    #return_vector = weekly_return[sorted_return]
-    ret = np.dot(weekly_return,best_pred)
-    weighted = np.append(weighted,ret)
-    ret_vector[j] = ret
-    if np.mod(i,4) == 0:
-        val += ret_vector[j-4]*val/100
-        soft_val_vector[k] = val
-        k += 1
-    #else:
-        #val_vector[i+1] = val_vector[i]
-    i += 1
-    j+= 1
-    
-opt_val = 1
-soft_opt_val_vector = np.ones([int(n_pred_weeks/4)])
-i = 0
-j = 1
-k = 0
-weighted = np.array([])
-ret_vector = np.zeros([n_pred_weeks+1])
-for weekly_return, opt_weight in zip(real_returns,_test_out):
-    ret = np.dot(weekly_return,opt_weight)
-    weighted = np.append(weighted,ret)
-    ret_vector[j] = ret
-    if np.mod(i,4) == 0:
-        val += ret_vector[j-4]*val/100
-        soft_opt_val_vector[k] = val
-        k += 1
-    i += 1
-    j += 1
-
-cray_val = 1
-cray_vector = np.ones([n_pred_weeks+1])
-i = 0
-for weekly_return, sorted_return in zip(real_returns, sorted_returns):
-    cray_val = cray_val + weekly_return[sorted_return[-1]]*cray_val/100
-    cray_vector[i+1] = cray_val
+returns = np.zeros([n_pred_weeks])
+for dist, real_return_vec in zip(pred_dist, real_returns):
+    ret = np.dot(dist, real_return_vec)
+    returns[i] = ret
     i += 1
     
-plt.clf()
-plt.ylabel('Value')
-plt.xlabel('Week')
-plt.plot(np.arange(0,n_pred_weeks,4),soft_value_vector/soft_value_vector[0],label='Uniform')
-plt.plot(np.arange(0,n_pred_weeks,4),soft_val_vector/soft_val_vector[0], label='LSTM softmax dist')
-#plt.plot(np.arange(0,n_pred_weeks,4),soft_opt_val_vector/soft_opt_val_vector[0], label = 'Optimal portfolio (softmax)')
-#plt.plot(cray_vector,label='Only best stock')
-plt.legend()
+returns = returns[0:-1:4]
+def compute_pred_value(returns):
+    val = 1
+    val_vec = np.ones((len(returns)+1))
+    i = 1
+    for ret in returns:
+        val += val*ret/100
+        val_vec[i] = val
+        i += 1
+        
+    return val_vec
+    
+soft_val_vec = compute_pred_value(returns)
+
+

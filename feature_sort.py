@@ -73,7 +73,7 @@ def rank_by_features(data):
 
 data_rank = rank_by_features(data)
 #%%
-n_pred_weeks = 230
+n_pred_weeks = 110
 dates = np.unique(data_rank.index)
 
 start_date = dates[-n_pred_weeks]

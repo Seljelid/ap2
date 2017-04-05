@@ -121,95 +121,92 @@ test_target = Y[training_size+validation_size:training_size+validation_size+test
 #%% MODEL, TENSORFLOW
 tf.reset_default_graph()
 #placeholders, things that we want to feed between runs
-
-inputs = tf.placeholder(tf.float32, [None, backprop_length , input_size], name = 'x')
-outputs = tf.placeholder(tf.float32, [None, backprop_length, output_size], name = 'y')
-keep_prob = tf.placeholder(tf.float32)
-
-#Initialize
-init_state = tf.placeholder(tf.float32, [num_layers, 2, None, state_size])
-state_per_layer_list = tf.unstack(init_state, axis=0)
-rnn_tuple_state = tuple(
-    [tf.contrib.rnn.core_rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
-     for idx in range(num_layers)])
-cell = tf.contrib.rnn.core_rnn_cell.LSTMCell(state_size, state_is_tuple = True)
-cell = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(cell,output_keep_prob = keep_prob)
-cell = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
-state_outputs, current_state =  tf.nn.dynamic_rnn(cell, inputs, initial_state = rnn_tuple_state)#init_state
-weight = tf.Variable(tf.truncated_normal([state_size, output_size], mean = 0.0, stddev = 0.3))
-bias = tf.Variable(tf.truncated_normal([output_size], mean = 0.0, stddev = 0.3))
-
-#the model
-state_outputs_reshaped = tf.reshape(state_outputs,[tf.shape(inputs)[0]*backprop_length,state_size])
-prediction_orig = tf.matmul(state_outputs_reshaped, weight) + bias
-                           
-prediction_softmax = tf.nn.softmax(prediction_orig)
-
-l2 = tf.nn.l2_loss(weight)
-
-#one_hot_out = tf.one_hot(out_matrix ,depth = output_size)
-
-out_retard = tf.reshape(outputs,[-1, output_size], name = 'Retard')
-out_softmax = tf.nn.softmax(out_retard)
-
-out_argmax = tf.argmax(out_retard, axis = 1, name = 'Argmax')
-out_one_hot = tf.one_hot(out_argmax, output_size, axis = 1 )
-
-reward = -tf.reduce_sum((tf.multiply(prediction_softmax, out_retard)))
-
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = prediction_orig, labels = out_one_hot) + 0.0005*l2)
-optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
-minimize = optimizer.minimize(cost)
-
-#Session
-sess = tf.Session()
-sess.run(tf.global_variables_initializer())
-train_error_store = []
-validation_error_store = []
-
-zero_state_batch = np.zeros((num_layers, 2, batch_size, state_size))
-zero_state_train = np.zeros((num_layers, 2, training_size, state_size))
-zero_state_validation = np.zeros((num_layers, 2, validation_size, state_size))
-zero_state_test = np.zeros((num_layers, 2, test_size, state_size))
-num_batches = int(training_size / batch_size)
-
 best_model_error = -1;
-best_reward = -10000000000000000000
-for epoch_idx in range(n_epochs):
+reruns = 3
+#best_reward = -10000000000000000000
+for i in range(reruns):    
+    inputs = tf.placeholder(tf.float32, [None, backprop_length , input_size], name = 'x')
+    outputs = tf.placeholder(tf.float32, [None, backprop_length, output_size], name = 'y')
+    keep_prob = tf.placeholder(tf.float32)
     
-    for batch_idx in range(num_batches):
-        #
-        _current_state = zero_state_batch
-        start_idx = (batch_idx) * batch_size
-        end_idx =  (batch_idx + 1) * batch_size
-        x = train_data[start_idx:end_idx, : , :]
-        y = train_target[start_idx:end_idx, : ]
-
-        _current_state,_,_state_out,_pred_out = sess.run([current_state,minimize,state_outputs,prediction_orig], 
-                                               feed_dict = {inputs: x, outputs: y,init_state: _current_state,keep_prob: dropout_prob})
+    #Initialize
+    init_state = tf.placeholder(tf.float32, [num_layers, 2, None, state_size])
+    state_per_layer_list = tf.unstack(init_state, axis=0)
+    rnn_tuple_state = tuple(
+        [tf.contrib.rnn.core_rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
+         for idx in range(num_layers)])
+    cell = tf.contrib.rnn.core_rnn_cell.LSTMCell(state_size, state_is_tuple = True)
+    cell = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(cell,output_keep_prob = keep_prob)
+    cell = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
+    state_outputs, current_state =  tf.nn.dynamic_rnn(cell, inputs, initial_state = rnn_tuple_state)#init_state
+    weight = tf.Variable(tf.truncated_normal([state_size, output_size], mean = 0.0, stddev = 0.3))
+    bias = tf.Variable(tf.truncated_normal([output_size], mean = 0.0, stddev = 0.3))
+    
+    #the model
+    state_outputs_reshaped = tf.reshape(state_outputs,[tf.shape(inputs)[0]*backprop_length,state_size])
+    prediction_orig = tf.matmul(state_outputs_reshaped, weight) + bias
+                               
+    prediction_softmax = tf.nn.softmax(prediction_orig)
+    
+    l2 = tf.nn.l2_loss(weight)
+    
+    #one_hot_out = tf.one_hot(out_matrix ,depth = output_size)
+    
+    out_retard = tf.reshape(outputs,[-1, output_size], name = 'Retard')
+    out_softmax = tf.nn.softmax(out_retard)
+    
+    out_argmax = tf.argmax(out_retard, axis = 1, name = 'Argmax')
+    out_one_hot = tf.one_hot(out_argmax, output_size, axis = 1 )
+    
+    reward = -tf.reduce_sum((tf.multiply(prediction_softmax, out_retard)))
+    
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = prediction_orig, labels = out_one_hot) + 0.0005*l2)
+    optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
+    minimize = optimizer.minimize(cost)
+    
+    #Session
+    sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
+    train_error_store = []
+    validation_error_store = []
+    
+    zero_state_batch = np.zeros((num_layers, 2, batch_size, state_size))
+    zero_state_train = np.zeros((num_layers, 2, training_size, state_size))
+    zero_state_validation = np.zeros((num_layers, 2, validation_size, state_size))
+    zero_state_test = np.zeros((num_layers, 2, test_size, state_size))
+    num_batches = int(training_size / batch_size)
+    
+    
+    for epoch_idx in range(n_epochs):
         
-    _epoch_error = sess.run(cost, feed_dict={inputs: train_data, outputs: train_target,
-                            init_state: zero_state_train , keep_prob: dropout_prob})
-    _validation_error,_validation_pred,_validation_out, _reward = sess.run([cost,prediction_softmax,out_softmax, reward],
-                            feed_dict={inputs: validation_data, outputs: validation_target, init_state:
-                            zero_state_validation, keep_prob: 1})
-    train_error_store.append(_epoch_error)
-    validation_error_store.append(_validation_error)
-    print('Epoch: ', epoch_idx , ', training:  %.2f  validation: %.2f' %(_epoch_error, _validation_error))
+        for batch_idx in range(num_batches):
+            #
+            _current_state = zero_state_batch
+            start_idx = (batch_idx) * batch_size
+            end_idx =  (batch_idx + 1) * batch_size
+            x = train_data[start_idx:end_idx, : , :]
+            y = train_target[start_idx:end_idx, : ]
     
-    if best_model_error > _validation_error or best_model_error < 0:
-        best_model_error = _validation_error
-        best_prediction = _validation_pred
-        best_epoch = epoch_idx
-    
-    if _reward > best_reward:
-        print(epoch_idx)
-        _test_error,_test_pred = sess.run([cost,prediction_softmax], feed_dict={inputs: test_data, outputs: test_target,
-                                              init_state: zero_state_test, keep_prob: 1})
+            _current_state,_,_state_out,_pred_out = sess.run([current_state,minimize,state_outputs,prediction_orig], 
+                                                   feed_dict = {inputs: x, outputs: y,init_state: _current_state,keep_prob: dropout_prob})
+            
+        _epoch_error = sess.run(cost, feed_dict={inputs: train_data, outputs: train_target,
+                                init_state: zero_state_train , keep_prob: dropout_prob})
+        _validation_error,_validation_pred,_validation_out, _reward = sess.run([cost,prediction_softmax,out_softmax, reward],
+                                feed_dict={inputs: validation_data, outputs: validation_target, init_state:
+                                zero_state_validation, keep_prob: 1})
+        train_error_store.append(_epoch_error)
+        validation_error_store.append(_validation_error)
+        print('Epoch: ', epoch_idx , ', training:  %.2f  validation: %.2f' %(_epoch_error, _validation_error))
         
-        best_reward = _reward
-    
-print('Test error: %.2f' %(_test_error))
+        if best_model_error > _validation_error or best_model_error < 0:
+            best_model_error = _validation_error
+            best_prediction = _validation_pred
+            best_epoch = epoch_idx
+            _test_error,_test_pred = sess.run([cost,prediction_softmax], feed_dict={inputs: test_data, outputs: test_target,
+                                                  init_state: zero_state_test, keep_prob: 1})
+        
+    print('Test error: %.2f' %(_test_error))
 #%%
 past_return , new_target = predict_past_return(test_target)
 mse_past_return = mse_error(past_return,new_target)
